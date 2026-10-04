@@ -425,3 +425,23 @@ def publish_verify(config_id: int, session: Session = Depends(get_session)):
         "top_keys": list(data.keys()),
         "bytes": len(raw),
     }
+
+
+@router.post("/{config_id}/live-preview")
+def live_preview(config_id: int, body: dict, session: Session = Depends(get_session)):
+    """直播源预览：抓取 url 解析 txt/m3u/json 格式，返回分组/频道统计与样例。
+    用于在配置直播源前验证地址可用、格式正确、频道数合理。"""
+    _get(session, config_id)
+    url = (body or {}).get("url", "").strip()
+    if not url:
+        raise HTTPException(400, "缺少 url")
+    from ..services.live_preview import preview_live
+    try:
+        # E2E/局域网场景：DSH_ALLOW_LOOPBACK_PREVIEW=1 时放行环回地址（仅限本机测试）
+        import os
+        allow_lb = os.environ.get("DSH_ALLOW_LOOPBACK_PREVIEW") == "1"
+        return {"ok": True, **preview_live(url, _allow_loopback=allow_lb)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}

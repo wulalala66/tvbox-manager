@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats,
+  listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
   checkAllSites as checkSites,
 } from '../api'
 
@@ -288,6 +288,21 @@ function loadStructured() {
 function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '' }) }
 function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
 
+// ---- 直播源预览（抓取 + 解析格式验证）----
+const lpVisible = ref(false)
+const lpLoading = ref(false)
+const lpError = ref('')
+const lpResult = ref(null)
+async function doLivePreview(l) {
+  if (!l.url || !l.url.trim()) { ElMessage.warning('请先填写直播源 url'); return }
+  lpVisible.value = true; lpLoading.value = true; lpError.value = ''; lpResult.value = null
+  try {
+    const r = await previewLive(id, l.url.trim())
+    if (!r.ok) { lpError.value = r.error || '抓取失败'; return }
+    lpResult.value = r
+  } catch (e) { lpError.value = e.message } finally { lpLoading.value = false }
+}
+
 function cleanObj(o) { // 去掉空值字段
   const out = {}
   for (const [k, v] of Object.entries(o)) if (v !== '' && v !== null && v !== undefined) out[k] = v
@@ -381,6 +396,7 @@ onMounted(load)
           <el-input v-model="l.epg" placeholder="epg（可选）" class="st-epg" />
           <el-input v-model="l.ua" placeholder="UA（可选）" class="st-ua" />
           <el-button size="small" type="danger" text @click="livesRows.splice(i, 1)">删</el-button>
+          <el-button size="small" text type="primary" :loading="l._loading" @click="doLivePreview(l)">预览</el-button>
         </div>
         <el-empty v-if="!livesRows.length" description="无直播源，点右上「+ 直播源」添加" :image-size="50" />
       </div>
@@ -399,6 +415,23 @@ onMounted(load)
         </div>
         <el-empty v-if="!parsesRows.length" description="无解析规则，点右上「+ 解析」添加" :image-size="50" />
       </div>
+
+      <el-dialog v-model="lpVisible" title="直播源预览" width="560px">
+        <template v-if="lpLoading"><el-skeleton :rows="4" animated /></template>
+        <template v-else-if="lpError"><el-alert type="error" :title="lpError" :closable="false" /></template>
+        <template v-else-if="lpResult">
+          <el-descriptions :column="3" border size="small">
+            <el-descriptions-item label="格式">{{ lpResult.format }}</el-descriptions-item>
+            <el-descriptions-item label="分组">{{ lpResult.n_groups }}</el-descriptions-item>
+            <el-descriptions-item label="频道">{{ lpResult.n_channels }}</el-descriptions-item>
+          </el-descriptions>
+          <div v-for="s in lpResult.sample" :key="s.group" class="lp-sample">
+            <div class="lp-g">📁 {{ s.group }}（{{ s.count }} 个频道）</div>
+            <div class="lp-ch" v-for="c in s.channels" :key="c">· {{ c }}</div>
+          </div>
+          <div v-if="!lpResult.sample?.length" style="color:#909399;font-size:12px;margin-top:8px">未解析到任何频道</div>
+        </template>
+      </el-dialog>
     </el-card>
 
     <el-card class="card-block" shadow="never">
@@ -557,6 +590,9 @@ onMounted(load)
 .st-row .st-epg { width: 160px; }
 .st-row .st-ua { width: 180px; }
 .st-row .st-type { width: 190px; }
+.lp-sample { margin-top: 10px; }
+.lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
 @media (max-width: 640px) {
   .st-row .st-name, .st-row .st-url, .st-row .st-epg, .st-row .st-ua, .st-row .st-type { width: 100%; min-width: 0; flex: none; }
   .st-row { gap: 4px; }
