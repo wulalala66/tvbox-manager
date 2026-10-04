@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { analyzeImport, commitImport } from '../api'
@@ -52,6 +52,14 @@ function reset() {
 }
 
 const kindLabel = { js: 'JS', py: 'PY', jar: 'JAR' }
+// 预检统计：key 已存在=冲突（会跳过）；existing_source_id=复用源；.js/.py api=需下载文件
+const existingKeys = ref(new Set())
+import { listSites as _ls } from '../api'
+_ls().then(d => { const items = Array.isArray(d) ? d : (d.items || []); existingKeys.value = new Set(items.map(s => s.key)) }).catch(() => {})
+const newCount = computed(() => (analysis.value?.candidates || []).filter(c => !existingKeys.value.has(c.key)).length)
+const dupCount = computed(() => (analysis.value?.candidates || []).length - newCount.value)
+const reuseCount = computed(() => (analysis.value?.candidates || []).filter(c => c.existing_source_id).length)
+const fetchCount = computed(() => (analysis.value?.candidates || []).filter(c => !c.existing_source_id && (c.kind === 'js' || c.kind === 'py')).length)
 const configs = ref([])
 const targetConfig = ref(null)
 import { listConfigs } from '../api'
@@ -91,6 +99,13 @@ const keepTop = ref(true)
       </div>
       <el-alert v-if="analysis.top_keys?.length && keepTop" type="info" :closable="false"
         title="将同时导入顶层字段（lives/parses/全局 spider 等）" style="margin-bottom: 10px" />
+      <!-- 预检摘要：新站点 / 已存在冲突 / 复用源 一眼看全 -->
+      <div class="precheck" v-if="analysis">
+        <el-tag type="success">新增 {{ newCount }}</el-tag>
+        <el-tag v-if="dupCount" type="danger">key 冲突 {{ dupCount }}（导入时跳过）</el-tag>
+        <el-tag v-if="reuseCount" type="info">复用已有源 {{ reuseCount }}</el-tag>
+        <el-tag v-if="fetchCount" type="warning">需下载源文件 {{ fetchCount }}</el-tag>
+      </div>
       <div class="cfg-row">
         <span class="muted">同时更新配置方案：</span>
         <el-select v-model="targetConfig" clearable placeholder="选择方案（可选）" style="width: 220px" size="small">
@@ -139,6 +154,7 @@ const keepTop = ref(true)
 .ana-info { margin-bottom: 12px; }
 .muted { color: #909399; font-size: 12px; }
 .cand-list { max-height: 55vh; overflow-y: auto; }
+.precheck { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
 .cand { display: flex; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #f0f0f0; align-items: flex-start; }
 .cand:last-child { border-bottom: none; }
 .cand-body { flex: 1; min-width: 0; }
