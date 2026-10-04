@@ -294,6 +294,11 @@ onMounted(load)
           <span class="sname" @click="$router.push({ path: '/sites', query: { q: s.name } })"
                 style="cursor:pointer" title="到站点页查看/测活">{{ s.name }}</span>
           <el-tag size="small" type="info">{{ typeLabel[s.site_type] || s.site_type }}</el-tag>
+          <el-tooltip v-if="s.health === 'fail'" :content="s.health_msg || '近次测活失败'" placement="top">
+            <el-tag size="small" type="danger" style="cursor:help">失效</el-tag>
+          </el-tooltip>
+          <el-tag v-else-if="s.health === 'ok'" size="small" type="success">正常</el-tag>
+          <el-tag v-else-if="s.health === 'untested'" size="small" type="info">未测</el-tag>
           <span class="skey">{{ s.key }}</span>
           <div style="flex:1"></div>
           <el-button size="small" text :disabled="i === 0" @click="move(i, -1)">↑</el-button>

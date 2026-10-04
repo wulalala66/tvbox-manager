@@ -27,6 +27,10 @@ def to_out(session: Session, c: Config) -> dict:
             sites.append({
                 "id": s.id, "key": s.key, "name": s.name, "site_type": s.site_type,
                 "enabled": s.enabled, "order_num": cs.order_num, "overrides": cs.overrides,
+                # 测活摘要：ok / fail / untested（供方案页直接显示健康徽标）
+                "health": ("ok" if s.last_test_result.get("ok")
+                           else "fail" if s.last_test_result else "untested"),
+                "health_msg": (s.last_test_result or {}).get("message", "")[:80],
             })
     return {
         "id": c.id, "name": c.name, "slug": c.slug,
