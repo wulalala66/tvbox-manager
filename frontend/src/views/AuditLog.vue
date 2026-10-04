@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 const items = ref([])
 const loading = ref(false)
 const eventFilter = ref('')
+const q = ref('')
 
 const EVENT_TYPES = ['login_ok', 'login_fail', 'logout', 'password_change']
 
@@ -35,9 +36,17 @@ async function load() {
   }
 }
 
-const filtered = computed(() =>
-  eventFilter.value ? items.value.filter(i => i.event === eventFilter.value) : items.value
-)
+const filtered = computed(() => {
+  let rows = eventFilter.value ? items.value.filter(i => i.event === eventFilter.value) : items.value
+  const kw = (q.value || '').trim().toLowerCase()
+  if (kw) {
+    rows = rows.filter(i =>
+      (i.detail || '').toLowerCase().includes(kw) ||
+      (i.ip || '').toLowerCase().includes(kw) ||
+      (i.event || '').toLowerCase().includes(kw))
+  }
+  return rows
+})
 
 function eventTagType(ev) {
   if (ev === 'login_fail') return 'danger'
@@ -54,6 +63,7 @@ onMounted(load)
     <div class="page-head">
       <h2>📋 审计日志</h2>
       <div class="actions">
+        <el-input v-model="q" placeholder="搜索 IP / 详情 / 事件" clearable style="width: 200px" />
         <el-select v-model="eventFilter" placeholder="全部事件" clearable style="width: 160px">
           <el-option v-for="ev in EVENT_TYPES" :key="ev" :label="ev" :value="ev" />
         </el-select>
