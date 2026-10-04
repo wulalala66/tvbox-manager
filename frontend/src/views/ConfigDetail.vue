@@ -322,6 +322,8 @@ function loadStructured() {
   const gf = cfg.value?.global_fields || {}
   livesRows.value = Array.isArray(gf.lives) ? gf.lives.map(l => ({
     name: l.name || '', url: l.url || '', epg: l.epg || '', ua: l.ua || '',
+    origin: l.origin || '', referer: l.referer || '', timeout: l.timeout ?? '', logo: l.logo || '', click: l.click || '',
+    header: l.header && typeof l.header === 'object' ? JSON.stringify(l.header) : '',
     timeZone: l.timeZone || '', boot: !!l.boot,
     catchup_type: l.catchup?.type || '', catchup_source: l.catchup?.source || '', catchup_regex: l.catchup?.regex || '', catchup_replace: l.catchup?.replace || '',
   })) : []
@@ -344,7 +346,7 @@ function loadStructured() {
   proxyRows.value = Array.isArray(gf.proxy) ? gf.proxy.map(p => ({ name: p.name || '', hosts: Array.isArray(p.hosts) ? p.hosts.join(',') : '', urls: Array.isArray(p.urls) ? p.urls.join(',') : '' })) : []
 }
 
-function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '', timeZone: '', boot: false, catchup_type: '', catchup_source: '', catchup_regex: '', catchup_replace: '' }) }
+function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '', origin: '', referer: '', timeout: '', logo: '', click: '', header: '', timeZone: '', boot: false, catchup_type: '', catchup_source: '', catchup_regex: '', catchup_replace: '' }) }
 function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
 function addAd() { adsRows.value.push({ v: '' }) }
 function addRule(t) { rulesRows.value.push(t ? { ...t } : { name: '', hosts: '', regex: '', exclude: '', script: '' }) }
@@ -417,14 +419,26 @@ function cleanObj(o) { // 去掉空值字段
 
 // 结构化数据 → 写回 global_fields 文本框 → 走统一保存链路
 async function saveStructured() {
-  const lives = livesRows.value.filter(r => r.name && r.url).map(r => cleanObj({
-    name: r.name.trim(), url: r.url.trim(), epg: r.epg.trim() || undefined, ua: r.ua.trim() || undefined,
-    timeZone: r.timeZone.trim() || undefined, boot: r.boot || undefined,
-    catchup: (r.catchup_source.trim() || r.catchup_type) ? cleanObj({
-      type: r.catchup_type.trim() || undefined, source: r.catchup_source.trim() || undefined, regex: r.catchup_regex.trim() || undefined,
-      replace: r.catchup_replace.trim() || undefined,
-    }) : undefined,
-  }))
+  const lives = []
+  for (const r of livesRows.value.filter(r => r.name && r.url)) {
+    let live_header
+    if (r.header.trim()) {
+      try { live_header = JSON.parse(r.header) } catch { ElMessage.error(`直播源「${r.name}」的 header 不是合法 JSON，未保存`); return }
+      if (typeof live_header !== 'object' || Array.isArray(live_header)) { ElMessage.error(`直播源「${r.name}」的 header 需为 JSON 对象，未保存`); return }
+    }
+    lives.push(cleanObj({
+      name: r.name.trim(), url: r.url.trim(), epg: r.epg.trim() || undefined, ua: r.ua.trim() || undefined,
+      origin: r.origin.trim() || undefined, referer: r.referer.trim() || undefined,
+      timeout: r.timeout !== '' && r.timeout !== null && !Number.isNaN(Number(r.timeout)) ? Number(r.timeout) : undefined,
+      logo: r.logo.trim() || undefined, click: r.click.trim() || undefined,
+      header: live_header,
+      timeZone: r.timeZone.trim() || undefined, boot: r.boot || undefined,
+      catchup: (r.catchup_source.trim() || r.catchup_type) ? cleanObj({
+        type: r.catchup_type.trim() || undefined, source: r.catchup_source.trim() || undefined, regex: r.catchup_regex.trim() || undefined,
+        replace: r.catchup_replace.trim() || undefined,
+      }) : undefined,
+    }))
+  }
   const parses = []
   for (const r of parsesRows.value.filter(r => r.name && r.url)) {
     const p = { name: r.name.trim(), type: Number(r.type) || 0, url: r.url.trim() }
@@ -560,6 +574,16 @@ onMounted(() => { load(); loadJars() })
             <el-input v-model="l.epg" placeholder="epg 多源逗号分隔，支持 {id}/{name}/{epg} 变量（可选）" class="st-epg" />
             <el-input v-model="l.timeZone" placeholder="时区，如 Asia/Shanghai（可选）" class="st-epg" />
             <el-input v-model="l.ua" placeholder="UA（可选）" class="st-ua" />
+          </div>
+          <div class="st-row" style="margin-bottom:4px">
+            <el-input v-model="l.origin" placeholder="Origin 标头（可选）" class="st-epg" />
+            <el-input v-model="l.referer" placeholder="Referer 标头（可选）" class="st-epg" />
+            <el-input v-model="l.timeout" placeholder="超时秒数（可选）" class="st-epg" />
+            <el-input v-model="l.logo" placeholder="频道 Logo 模板 {id}/{name}/{logo}（可选）" class="st-url" />
+          </div>
+          <div class="st-row" style="margin-bottom:4px">
+            <el-input v-model="l.click" placeholder="点击拦截处理 url/规则（可选）" class="st-url" />
+            <el-input v-model="l.header" placeholder='附加 header JSON，如 {"X-Token":"abc"}（可选）' class="st-url" />
           </div>
           <div class="st-row">
             <el-select v-model="l.catchup_type" placeholder="追看类型（可选）" clearable class="st-epg">
