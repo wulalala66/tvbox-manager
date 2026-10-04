@@ -503,7 +503,17 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="测活" width="130">
         <template #default="{ row }">
-          <el-tag v-if="healthTag(row)" :type="healthTag(row).type" size="small">{{ healthTag(row).text }}</el-tag>
+          <el-popover v-if="row.last_test_result && !row.last_test_result.ok" placement="top" :width="320" trigger="hover">
+            <template #reference>
+              <el-tag :type="healthTag(row).type" size="small" style="cursor:help">{{ healthTag(row).text }}</el-tag>
+            </template>
+            <div style="font-size:12px;line-height:1.6">
+              <div style="font-weight:600;margin-bottom:4px">{{ row.name }}（{{ row.key }}）失败详情</div>
+              <div style="color:#909399">时间：{{ row.last_test_at ? timeAgo(row.last_test_at) : '—' }}</div>
+              <div style="word-break:break-all">{{ row.last_test_result.message || JSON.stringify(row.last_test_result) }}</div>
+            </div>
+          </el-popover>
+          <el-tag v-else-if="healthTag(row)" :type="healthTag(row).type" size="small">{{ healthTag(row).text }}</el-tag>
           <span v-else style="color:#c0c4cc">未测</span>
           <div v-if="row.last_test_at" style="font-size:11px;color:#909399;margin-top:2px">{{ timeAgo(row.last_test_at) }}</div>
         </template>
