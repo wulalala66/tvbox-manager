@@ -127,7 +127,7 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="toolbar">
-      <el-input v-model="keyword" placeholder="搜索名称 / slug" clearable style="max-width: 240px" />
+      <el-input v-model="keyword" placeholder="搜索名称 / slug" clearable style="max-width: 240px" @keyup.enter="page = 1" @clear="page = 1" />
       <div style="flex:1"></div>
       <el-button type="primary" @click="dialog = true">＋ 新建方案</el-button>
     </div>
