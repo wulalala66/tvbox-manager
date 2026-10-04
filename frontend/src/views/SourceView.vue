@@ -213,9 +213,13 @@ onBeforeRouteLeave(() => {
 .page :deep(.el-textarea__inner) { font-family: monospace; }
 .page :deep(.el-table) { width: 100%; }
 @media (max-width: 640px) {
-  .src-desc { overflow-x: auto; }
-  .src-desc :deep(.el-descriptions__table) { table-layout: fixed; width: 100%; }
-  .src-desc :deep(.el-descriptions__label) { width: 76px; }
+  /* 信息 tab：强制 fixed 布局 + 长值换行，消除 467px 内容横滚（根因：methods/hosts 长 JSON 不换行） */
+  .src-desc { width: 100%; }
+  .src-desc :deep(.el-descriptions__table) { table-layout: fixed; width: 100% !important; }
+  .src-desc :deep(.el-descriptions__label) { width: 88px; word-break: break-all; }
+  .src-desc :deep(.el-descriptions__content) { word-break: break-all; overflow-wrap: anywhere; white-space: normal !important; }
+  .src-desc :deep(.el-descriptions__body .el-descriptions__table) { display: table; }
+  .src-desc :deep(.el-descriptions__cell) { display: table-cell; }
   .page :deep(.el-textarea__inner) { font-size: 12px; }
   .ver-time { display: block; }
 
