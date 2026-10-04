@@ -262,9 +262,18 @@ async function recheckSites() {
   rechecking.value = false
 }
 
-// ---- 直播源（lives）/ 解析（parses）结构化编辑（FongMi 扩展字段，写入 global_fields）----
+// ---- 直播源（lives）/ 解析（parses）/ 去广告嗅探规则 / 弹幕 结构化编辑（FongMi 扩展字段，写入 global_fields）----
 const livesRows = ref([])
 const parsesRows = ref([])
+const adsRows = ref([])     // [{v}] → gf.ads: [域名]
+const rulesRows = ref([])   // [{name,hosts,regex,exclude,script}] → gf.rules
+const danmakuUrl = ref('')  // → gf.danmaku
+// 内置常用嗅探/去广告规则模板（FongMi 社区常见配置）
+const RULE_TEMPLATES = [
+  { name: '通用视频嗅探', hosts: '', regex: 'http(.+?)\\.(m3u8|mp4|flv|avi|mkv|mpeg|mov|ts|3gp|rm|rmvb|wmv)(.*)', exclude: '', script: '' },
+  { name: '广告域拦截', hosts: '', regex: '', exclude: 'doubleclick,googlesyndication,adsserver,mi.gdt.qq.com', script: '' },
+  { name: '腾讯视频嗅探', hosts: 'v.qq.com', regex: 'http(.+?)\\.mp4', exclude: '', script: '' },
+]
 const PARSE_TYPES = [
   { v: 0, label: '0 · 嗅探（WebView 拦截）' },
   { v: 1, label: '1 · JSON 接口' },
@@ -283,10 +292,19 @@ function loadStructured() {
     flag: Array.isArray(p?.ext?.flag) ? p.ext.flag.join(',') : '',
     header: p?.ext?.header ? JSON.stringify(p.ext.header) : '',
   })) : []
+  adsRows.value = Array.isArray(gf.ads) ? gf.ads.map(a => ({ v: String(a) })) : []
+  rulesRows.value = Array.isArray(gf.rules) ? gf.rules.map(r => ({
+    name: r.name || '', hosts: Array.isArray(r.hosts) ? r.hosts.join(',') : '',
+    regex: r.regex || '', exclude: Array.isArray(r.exclude) ? r.exclude.join(',') : '',
+    script: r.script || '',
+  })) : []
+  danmakuUrl.value = typeof gf.danmaku === 'string' ? gf.danmaku : ''
 }
 
 function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '' }) }
 function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
+function addAd() { adsRows.value.push({ v: '' }) }
+function addRule(t) { rulesRows.value.push(t ? { ...t } : { name: '', hosts: '', regex: '', exclude: '', script: '' }) }
 
 // ---- 直播源预览（抓取 + 解析格式验证）----
 const lpVisible = ref(false)
@@ -360,6 +378,20 @@ async function saveStructured() {
   try { fields = JSON.parse(editForm.value.global_fields || '{}') } catch { ElMessage.error('全局字段不是合法 JSON，请先修正后再保存结构化字段'); return }
   if (lives.length) fields.lives = lives; else delete fields.lives
   if (parses.length) fields.parses = parses; else delete fields.parses
+  const ads = adsRows.value.map(r => r.v.trim()).filter(Boolean)
+  if (ads.length) fields.ads = ads; else delete fields.ads
+  const rules = rulesRows.value.filter(r => r.regex.trim() || r.hosts.trim() || r.exclude.trim()).map(r => cleanObj({
+    name: r.name.trim() || undefined, hosts: r.hosts.trim() ? r.hosts.split(/[,，、]/).map(x => x.trim()).filter(Boolean) : undefined,
+    regex: r.regex.trim() || undefined, exclude: r.exclude.trim() ? r.exclude.split(/[,，、]/).map(x => x.trim()).filter(Boolean) : undefined,
+    script: r.script.trim() || undefined,
+  }))
+  if (rules.length) {
+    for (const r of rules) {
+      try { if (r.regex) new RegExp(r.regex) } catch { ElMessage.error(`规则「${r.name || '未命名'}」的 regex 不合法，未保存`); return }
+    }
+    fields.rules = rules
+  } else delete fields.rules
+  if (danmakuUrl.value.trim()) fields.danmaku = danmakuUrl.value.trim(); else delete fields.danmaku
   editForm.value.global_fields = JSON.stringify(fields, null, 2)
   await saveBase()
 }
@@ -447,6 +479,44 @@ onMounted(load)
           <el-button size="small" type="danger" text @click="parsesRows.splice(i, 1)">删</el-button>
         </div>
         <el-empty v-if="!parsesRows.length" description="无解析规则，点右上「+ 解析」添加" :image-size="50" />
+      </div>
+
+      <div class="st-sec">
+        <div class="st-title">去广告 ads（{{ adsRows.length }}）</div>
+        <div v-for="(a, i) in adsRows" :key="'a'+i" class="st-row">
+          <el-input v-model="a.v" placeholder="广告域名，如 ad.doubleclick.net" class="st-url" />
+          <el-button size="small" type="danger" text @click="adsRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addAd">+ 域名</el-button>
+        <el-empty v-if="!adsRows.length" description="无拦截域名（可选）" :image-size="40" />
+      </div>
+
+      <div class="st-sec">
+        <div class="st-title">嗅探/去广告规则 rules（{{ rulesRows.length }}）</div>
+        <div class="st-tip" style="margin-bottom:6px">regex 决定 WebView 嗅探哪些 url 算媒体（直接影响嗅探型站点能否出片）；hosts 限定生效域名；exclude 排除。可用模板：</div>
+        <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <el-button v-for="t in RULE_TEMPLATES" :key="t.name" size="small" @click="addRule(t)">+ {{ t.name }}</el-button>
+        </div>
+        <div v-for="(r, i) in rulesRows" :key="'r'+i" class="rule-row">
+          <div class="st-row" style="margin-bottom:4px">
+            <el-input v-model="r.name" placeholder="规则名" class="st-name" />
+            <el-input v-model="r.hosts" placeholder="hosts 逗号分隔（可选）" class="st-epg" />
+            <el-button size="small" type="danger" text @click="rulesRows.splice(i, 1)">删</el-button>
+          </div>
+          <div class="st-row">
+            <el-input v-model="r.regex" placeholder="媒体正则 regex，如 http(.+?)\.(m3u8|mp4)(.*)" class="st-url" />
+            <el-input v-model="r.exclude" placeholder="排除正则（可选）" class="st-epg" />
+          </div>
+        </div>
+        <el-button size="small" text type="primary" @click="addRule()">+ 规则</el-button>
+        <el-empty v-if="!rulesRows.length" description="无自定义规则（可选，模板一键导入）" :image-size="40" />
+      </div>
+
+      <div class="st-sec">
+        <div class="st-title">弹幕 danmaku</div>
+        <div class="st-row">
+          <el-input v-model="danmakuUrl" placeholder="弹幕接口 url，含 {name}/{episode} 占位走 GET，否则 POST form（可选）" class="st-url" />
+        </div>
       </div>
 
       <el-dialog v-model="dgVisible" title="配置诊断" width="640px">
@@ -668,6 +738,7 @@ onMounted(load)
 .st-row .st-epg { width: 160px; }
 .st-row .st-ua { width: 180px; }
 .st-row .st-type { width: 190px; }
+.rule-row { border: 1px dashed #dcdfe6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
 .lp-sample { margin-top: 10px; }
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
