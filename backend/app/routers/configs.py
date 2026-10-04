@@ -100,6 +100,15 @@ def get_config(config_id: int, session: Session = Depends(get_session)):
     return to_out(session, _get(session, config_id))
 
 
+@router.get("/{config_id}/key")
+def get_config_key(config_id: int, session: Session = Depends(get_session)):
+    """返回 2423 解密密钥（需登录；下载接口是公开的，密钥只给管理端）"""
+    c = _get(session, config_id)
+    if not c.encrypt or not c.enc_key:
+        raise HTTPException(404, "该方案未启用 2423 加密")
+    return {"key": c.enc_key}
+
+
 @router.put("/{config_id}")
 def update_config(config_id: int, body: ConfigUpdate, session: Session = Depends(get_session)):
     c = _get(session, config_id)

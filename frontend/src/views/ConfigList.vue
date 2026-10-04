@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listConfigs, createConfig, deleteConfig, publishConfig, duplicateConfig } from '../api'
+import { listConfigs, createConfig, deleteConfig, publishConfig, duplicateConfig, getConfigKey } from '../api'
 
 const router = useRouter()
 const items = ref([])
@@ -96,6 +96,17 @@ async function copyLink(c) {
   catch { ElMessageBox.alert(url, '订阅链接（请手动复制）', { confirmButtonText: '关闭' }) }
 }
 
+// 复制订阅+解密 key（2423 加密方案在 TVBox 端填配置时两者都要）
+async function copyFull(c) {
+  if (!c.share_token) { ElMessage.warning('尚未发布，无订阅链接'); return }
+  let key = null
+  try { key = (await getConfigKey(c.id)).key } catch { /* 未加密则无 key */ }
+  const url = `${location.origin}/configs/${c.id}/download?token=${c.share_token}`
+  const text = key ? `${url}\n解密密钥：${key}` : url
+  try { await navigator.clipboard.writeText(text); ElMessage.success(key ? '订阅链接 + 解密密钥已复制' : '订阅链接已复制（未加密）') }
+  catch { ElMessageBox.alert(text, '订阅信息（请手动复制）', { customStyle: { whiteSpace: 'pre-line' }, confirmButtonText: '关闭' }) }
+}
+
 const qrDialog = ref(false)
 const qrDataUrl = ref('')
 const qrName = ref('')
@@ -131,6 +142,7 @@ onMounted(load)
         <div class="m-foot">
           <el-button size="small" type="primary" plain @click.stop="publish(c)">发布</el-button>
           <el-button size="small" @click.stop="copyLink(c)">订阅</el-button>
+          <el-button size="small" @click.stop="copyFull(c)">链接+密钥</el-button>
           <el-button size="small" @click.stop="showQr(c)">二维码</el-button>
           <el-button size="small" type="warning" plain @click.stop="duplicate(c)">复制</el-button>
           <el-button size="small" type="danger" plain @click.stop="remove(c)">删除</el-button>
@@ -164,6 +176,7 @@ onMounted(load)
           <el-button size="small" @click="router.push(`/configs/${row.id}`)">编辑</el-button>
           <el-button size="small" type="success" plain @click="publish(row)">发布</el-button>
           <el-button size="small" @click="copyLink(row)">订阅链接</el-button>
+          <el-button size="small" @click="copyFull(row)">链接+密钥</el-button>
           <el-button size="small" @click="showQr(row)">二维码</el-button>
           <el-button size="small" type="warning" plain @click.stop="duplicate(row)">复制</el-button>
           <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
