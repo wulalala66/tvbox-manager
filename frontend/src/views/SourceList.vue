@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listSources, deleteSource, uploadSources, importSourceUrl, getSourceUsages } from '../api'
+import { listSources, deleteSource, uploadSources, importSourceUrl, getSourceUsages, scanOrphans, cleanupOrphans } from '../api'
 
 const loading = ref(false)
 const items = ref([])
@@ -82,6 +82,44 @@ async function doImportUrl() {
   urlLoading.value = false
 }
 
+// ---- 源库体检 ----
+const orphanDialog = ref(false)
+const orphanLoading = ref(false)
+const orphanReport = ref(null)
+const orphanPick = ref({ notInDb: [], missingRows: [] })
+const orphanClean = computed(() => orphanReport.value &&
+  !orphanReport.value.not_in_db.length && !orphanReport.value.missing_file.length)
+async function runOrphanScan() {
+  orphanLoading.value = true
+  try {
+    orphanReport.value = await scanOrphans()
+    orphanPick.value = { notInDb: [], missingRows: [] }
+    orphanDialog.value = true
+  } catch (e) { ElMessage.error(e.message) }
+  orphanLoading.value = false
+}
+async function doOrphanCleanup() {
+  const n = orphanPick.value.notInDb.length + orphanPick.value.missingRows.length
+  if (!n) return ElMessage.warning('请先勾选要清理的项')
+  try {
+    await ElMessageBox.confirm(
+      `将删除 ${n} 个选中项（磁盘文件不可恢复）。确定？`, '清理确认', { type: 'warning' })
+  } catch { return }
+  orphanLoading.value = true
+  try {
+    const r = await cleanupOrphans({
+      remove_not_in_db: orphanPick.value.notInDb.length > 0,
+      not_in_db: orphanPick.value.notInDb.map(p => ({ path: p })),
+      remove_missing_rows: orphanPick.value.missingRows.length > 0,
+      missing_rows: orphanPick.value.missingRows.map(id => ({ id })),
+    })
+    ElMessage.success(`已清理：文件 ${r.removed_files.length} 个，记录 ${r.removed_rows.length} 条`)
+    orphanDialog.value = false
+    load()
+  } catch (e) { ElMessage.error(e.message) }
+  orphanLoading.value = false
+}
+
 const usageLoading = ref(false)
 const usageItems = ref([])
 async function loadUsages(row) {
@@ -149,6 +187,7 @@ onMounted(load)
       <el-button type="primary" @click="pickFiles">上传文件</el-button>
       <el-button type="warning" plain @click="pickOverwriteFiles">覆盖上传</el-button>
       <el-button @click="urlDialog = true">URL 导入</el-button>
+      <el-button @click="runOrphanScan" :loading="orphanLoading">🩺 体检</el-button>
     </div>
 
     <div class="mobile-list">
@@ -230,6 +269,44 @@ onMounted(load)
         <el-button type="primary" :loading="urlLoading" @click="doImportUrl">导入</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="orphanDialog" title="🩺 源库体检" width="min(560px, 94vw)">
+      <template v-if="orphanReport">
+        <el-alert v-if="orphanClean" type="success" :closable="false" show-icon
+                  :title="`体检通过：${orphanReport.total_db} 个源全部健康`"
+                  description="磁盘与数据库一致，无孤儿文件、无缺失、无零引用。" />
+        <template v-else>
+          <div v-if="orphanReport.not_in_db.length" class="orphan-sec">
+            <div class="orphan-title">磁盘有、库里无（上传中断/手动放置）— {{ orphanReport.not_in_db.length }} 个</div>
+            <el-checkbox-group v-model="orphanPick.notInDb">
+              <el-checkbox v-for="f in orphanReport.not_in_db" :key="f.path" :value="f.path">
+                {{ f.path }}（{{ fmtSize(f.size) }}）
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
+          <div v-if="orphanReport.missing_file.length" class="orphan-sec">
+            <div class="orphan-title">库里有、文件丢 — {{ orphanReport.missing_file.length }} 个</div>
+            <el-checkbox-group v-model="orphanPick.missingRows">
+              <el-checkbox v-for="f in orphanReport.missing_file" :key="f.id" :value="f.id">
+                {{ f.name }}（{{ f.filename }}）
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
+          <div v-if="orphanReport.unreferenced.length" class="orphan-sec">
+            <div class="orphan-title">零引用（无站点使用，仅提示，不参与清理）— {{ orphanReport.unreferenced.length }} 个</div>
+            <div v-for="f in orphanReport.unreferenced" :key="f.id" class="orphan-row">
+              {{ f.name }}（{{ f.filename }}）
+            </div>
+          </div>
+        </template>
+      </template>
+      <template #footer>
+        <el-button @click="orphanDialog = false">关闭</el-button>
+        <el-button v-if="!orphanClean" type="danger" :loading="orphanLoading" @click="doOrphanCleanup">
+          删除选中（{{ orphanPick.notInDb.length + orphanPick.missingRows.length }}）
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -237,6 +314,9 @@ onMounted(load)
 .desktop-table { display: block; }
 .mobile-list { display: none; }
 .ref-link { color: #409eff; cursor: pointer; text-decoration: underline dotted; }
+.orphan-sec { margin-bottom: 12px; }
+.orphan-title { font-weight: 600; margin-bottom: 6px; }
+.orphan-row { color: #909399; font-size: 13px; padding-left: 8px; }
 .usage-item { display: flex; justify-content: space-between; padding: 4px 0; cursor: pointer; border-bottom: 1px solid #ebeef5; font-size: 13px; }
 .usage-item:last-child { border-bottom: none; }
 .usage-name { color: #303133; }

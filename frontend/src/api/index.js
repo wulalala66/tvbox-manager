@@ -54,3 +54,5 @@ export const batchAddConfigSites = (configId, siteIds) => http.post(`/configs/${
 export const batchRemoveConfigSites = (configId, siteIds) => http.post(`/configs/${configId}/sites/batch-remove`, { site_ids: siteIds })
 export const duplicateConfig = (id, body) => http.post(`/configs/${id}/duplicate`, body || {})
 export const checkProgress = () => http.get('/health/check-progress')
+export const scanOrphans = () => http.get('/sources/orphans/scan')
+export const cleanupOrphans = (body) => http.post('/sources/orphans/cleanup', body)

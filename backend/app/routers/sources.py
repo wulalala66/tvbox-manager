@@ -247,3 +247,65 @@ def delete_source(source_id: int, force: bool = False, session: Session = Depend
     if vdir.is_dir():
         shutil.rmtree(vdir, ignore_errors=True)
     return {"ok": True}
+
+
+@router.get("/orphans/scan")
+def scan_orphans(session: Session = Depends(get_session)):
+    """孤儿源体检：磁盘上存在但 DB 无登记、或 DB 登记但文件缺失、或 0 引用的源。"""
+    from pathlib import Path as _Path
+    db_files: dict[str, dict] = {}
+    for s in session.exec(select(Source)).all():
+        db_files[f"{s.kind}/{s.filename}"] = {
+            "id": s.id, "name": s.name, "kind": s.kind, "filename": s.filename,
+            "size": s.size, "ref_count": source_store.ref_count(session, s.id),
+            "issue": "missing_file" if not (SOURCES_DIR / s.kind / s.filename).exists() else None,
+        }
+    disk_files = []
+    for kind in ("js", "py", "jar"):
+        d = SOURCES_DIR / kind
+        if not d.is_dir():
+            continue
+        for p in sorted(d.iterdir()):
+            if not p.is_file() or p.name.startswith("."):
+                continue
+            key = f"{kind}/{p.name}"
+            if key not in db_files:
+                disk_files.append({
+                    "path": key, "kind": kind, "filename": p.name,
+                    "size": p.stat().st_size,
+                })
+    registered = [v for v in db_files.values()]
+    unreferenced = [v for v in registered if v["ref_count"] == 0 and v["issue"] is None]
+    missing = [v for v in registered if v["issue"] == "missing_file"]
+    return {
+        "total_db": len(registered),
+        "total_disk": len(disk_files) + len([v for v in registered if v["issue"] is None]),
+        "not_in_db": disk_files,       # 磁盘有、DB 无（上传中断/手动放置）
+        "missing_file": missing,       # DB 有、文件丢
+        "unreferenced": unreferenced,  # 0 站点引用
+    }
+
+
+@router.post("/orphans/cleanup")
+def cleanup_orphans(body: dict = None, session: Session = Depends(get_session)):
+    """清理孤儿源：删除 not_in_db 的磁盘文件（可选）；DB 缺文件的记录（可选）。"""
+    body = body or {}
+    removed_files = []
+    removed_rows = []
+    if body.get("remove_not_in_db"):
+        for item in body.get("not_in_db", []):
+            p = SOURCES_DIR / item["path"]
+            if p.exists() and p.is_file():
+                p.unlink()
+                removed_files.append(item["path"])
+    if body.get("remove_missing_rows"):
+        for item in body.get("missing_rows", []):
+            s = session.get(Source, item["id"])
+            if s:
+                for v in session.exec(select(SourceVersion).where(
+                        SourceVersion.source_id == s.id)).all():
+                    session.delete(v)
+                session.delete(s)
+                removed_rows.append({"id": item["id"], "name": item["name"]})
+    session.commit()
+    return {"ok": True, "removed_files": removed_files, "removed_rows": removed_rows}
