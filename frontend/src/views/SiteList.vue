@@ -21,6 +21,8 @@ const saving = ref(false)
 const form = reactive({
   key: '', name: '', site_type: 3, api: '', ext: '', jar: '',
   searchable: true, changeable: true, hide: 0, timeout: null,
+  quickSearch: true, indexs: 0, click: '', playUrl: '', categories: '', header: '',
+  style_type: '', style_ratio: null,
 })
 
 // 从源库选源 → 自动填 api（日常加站一键引用源文件）
@@ -53,7 +55,8 @@ function minifyExt() {
 
 function openCreate() {
   editing.value = null
-  Object.assign(form, { key: '', name: '', site_type: 3, api: '', ext: '', jar: '', searchable: true, changeable: true, hide: 0, timeout: null })
+  Object.assign(form, { key: '', name: '', site_type: 3, api: '', ext: '', jar: '', searchable: true, changeable: true, hide: 0, timeout: null,
+    quickSearch: true, indexs: 0, click: '', playUrl: '', categories: '', header: '', style_type: '', style_ratio: null })
   dialog.value = true
 }
 
@@ -70,6 +73,11 @@ function cloneSite(s) {
     ext: extShown, jar: s.jar || '',
     searchable: s.extra?.searchable !== false, changeable: s.extra?.changeable !== false,
     hide: s.extra?.hide || 0, timeout: s.extra?.timeout || null,
+    quickSearch: s.extra?.quickSearch !== false, indexs: s.extra?.indexs || 0,
+    click: s.extra?.click || '', playUrl: s.extra?.playUrl || '',
+    categories: Array.isArray(s.extra?.categories) ? s.extra.categories.join(',') : '',
+    header: s.extra?.header ? JSON.stringify(s.extra.header) : '',
+    style_type: s.extra?.style?.type || '', style_ratio: s.extra?.style?.ratio ?? null,
   })
   dialog.value = true
   ElMessage.info('已载入站点副本，请修改 key 后保存')
@@ -89,6 +97,11 @@ function openEdit(s) {
     jar: s.jar || '', searchable: s.extra?.searchable !== false,
     changeable: s.extra?.changeable !== false, hide: s.extra?.hide || 0,
     timeout: s.extra?.timeout || null,
+    quickSearch: s.extra?.quickSearch !== false, indexs: s.extra?.indexs || 0,
+    click: s.extra?.click || '', playUrl: s.extra?.playUrl || '',
+    categories: Array.isArray(s.extra?.categories) ? s.extra.categories.join(',') : '',
+    header: s.extra?.header ? JSON.stringify(s.extra.header) : '',
+    style_type: s.extra?.style?.type || '', style_ratio: s.extra?.style?.ratio ?? null,
   })
   dialog.value = true
 }
@@ -103,12 +116,27 @@ async function save() {
   if ((form.site_type === 0 || form.site_type === 1) && !/^https?:\/\//.test(apiTrim))
     return ElMessage.error('XML/JSON 类型（0/1）的 api 必须是 http(s):// 接口地址')
   saving.value = true
+  // FongMi 站点级扩展字段（写入 extra，编译时并入产物 site 项）
+  if (form.header && form.header.trim()) {
+    try { JSON.parse(form.header) } catch {
+      saving.value = false
+      return ElMessage.error('header 不是合法 JSON 对象，请修正后再保存')
+    }
+  }
+  const extra = {
+    searchable: form.searchable, changeable: form.changeable, hide: form.hide,
+    quickSearch: form.quickSearch,
+    ...(form.indexs ? { indexs: form.indexs } : {}),
+    ...(form.timeout ? { timeout: form.timeout } : {}),
+    ...(form.click.trim() ? { click: form.click.trim() } : {}),
+    ...(form.playUrl.trim() ? { playUrl: form.playUrl.trim() } : {}),
+    ...(form.categories.trim() ? { categories: form.categories.split(/[,，]/).map(x => x.trim()).filter(Boolean) } : {}),
+    ...(form.header.trim() ? { header: JSON.parse(form.header) } : {}),
+    ...(form.style_type || form.style_ratio ? { style: { ...(form.style_type ? { type: form.style_type } : {}), ...(form.style_ratio ? { ratio: form.style_ratio } : {}) } } : {}),
+  }
   const body = {
     key: form.key, name: form.name, site_type: form.site_type, api: form.api,
-    extra: {
-      searchable: form.searchable, changeable: form.changeable, hide: form.hide,
-      ...(form.timeout ? { timeout: form.timeout } : {}),
-    },
+    extra,
   }
   if (form.ext) {
     body.ext = form.ext
@@ -638,6 +666,42 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="隐藏">
           <el-switch v-model="form.hide" :active-value="1" :inactive-value="0" active-text="hide=1 仅UI隐藏" />
+        </el-form-item>
+        <el-form-item label="快速搜索">
+          <el-switch v-model="form.quickSearch" />
+        </el-form-item>
+        <el-form-item label="索引来源">
+          <el-switch v-model="form.indexs" active-text="indexs=1 作为索引来源" />
+        </el-form-item>
+        <el-form-item label="timeout">
+          <el-input-number v-model="form.timeout" :min="1" :max="600" controls-position="right" placeholder="秒（可空）" style="width: 160px" />
+        </el-form-item>
+        <el-form-item label="点击拦截 click">
+          <el-input v-model="form.click" placeholder="点击拦截 URL 或规则（可空）" />
+        </el-form-item>
+        <el-form-item label="播放前缀 playUrl">
+          <el-input v-model="form.playUrl" placeholder="播放 URL 前缀/转换规则（可空）" />
+        </el-form-item>
+        <el-form-item label="分类白名单">
+          <el-input v-model="form.categories" placeholder="仅显示这些分类，逗号分隔（可空=全部）" />
+        </el-form-item>
+        <el-form-item label="请求头 header">
+          <el-input v-model="form.header" type="textarea" :rows="2" placeholder='HTTP 请求头 JSON 对象，如 {"User-Agent":"Mozilla/5.0"}（可空）' />
+        </el-form-item>
+        <el-form-item label="卡片样式 style">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <el-select v-model="form.style_type" clearable placeholder="类型（可空）" style="width: 130px">
+              <el-option label="rect 矩形" value="rect" />
+              <el-option label="oval 圆形" value="oval" />
+              <el-option label="list 列表" value="list" />
+            </el-select>
+            <el-select v-model="form.style_ratio" clearable placeholder="比例（可空）" style="width: 130px">
+              <el-option :value="0.75" label="0.75 直式海报 3:4" />
+              <el-option :value="1" label="1 正方形" />
+              <el-option :value="1.33" label="1.33 横式 4:3" />
+              <el-option :value="1.78" label="1.78 宽屏 16:9" />
+            </el-select>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
