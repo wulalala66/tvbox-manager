@@ -212,7 +212,7 @@ async function loadHealth() {
 function healthTag(s) {
   const r = s.last_test_result
   if (!r) return null
-  return r.ok ? { type: 'success', text: '正常' } : { type: 'danger', text: r.message?.slice(0, 20) || '失效' }
+  return r.ok ? { type: 'success', text: '正常' } : { type: 'danger', text: '失效' }
 }
 function timeAgo(ts) {
   const diff = Date.now() - new Date(ts).getTime()
@@ -486,6 +486,7 @@ onMounted(() => {
         </div>
         <div class="m-key">key: {{ s.key }}</div>
         <div class="m-api">{{ s.api }}</div>
+        <div v-if="s.last_test_result && !s.last_test_result.ok" class="m-errmsg">{{ s.last_test_result.message }}</div>
         <div class="m-meta">
           <el-switch v-model="s.enabled" size="small" @change="toggle(s)" />
           <el-tag v-if="healthTag(s)" :type="healthTag(s).type" size="small" class="m-health">{{ healthTag(s).text }}<span v-if="s.last_test_at" style="font-weight:400;font-size:11px"> · {{ timeAgo(s.last_test_at) }}</span></el-tag>
@@ -538,7 +539,7 @@ onMounted(() => {
         <template #default="{ row }">
           <el-popover v-if="row.last_test_result && !row.last_test_result.ok" placement="top" :width="320" trigger="hover">
             <template #reference>
-              <el-tag :type="healthTag(row).type" size="small" style="cursor:help">{{ healthTag(row).text }}</el-tag>
+              <el-tag :type="healthTag(row).type" size="small" style="cursor:help">失效 · 详情</el-tag>
             </template>
             <div style="font-size:12px;line-height:1.6">
               <div style="font-weight:600;margin-bottom:4px">{{ row.name }}（{{ row.key }}）失败详情</div>
@@ -549,6 +550,11 @@ onMounted(() => {
           <el-tag v-else-if="healthTag(row)" :type="healthTag(row).type" size="small">{{ healthTag(row).text }}</el-tag>
           <span v-else style="color:#c0c4cc">未测</span>
           <div v-if="row.last_test_at" style="font-size:11px;color:#909399;margin-top:2px">{{ timeAgo(row.last_test_at) }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="失败原因" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.last_test_result && !row.last_test_result.ok" style="font-size:12px;color:#f56c6c">{{ row.last_test_result.message }}</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
@@ -669,6 +675,7 @@ onMounted(() => {
 .m-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .m-actions .el-button { width: 100%; margin-left: 0; height: 32px; }
 .m-health { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.m-errmsg { font-size: 11px; color: #f56c6c; margin-top: 4px; word-break: break-all; }
 .m-tag { margin-right: 4px; }
 .batch-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 10px; background: #ecf5ff; border-radius: 6px; flex-wrap: wrap; font-size: 13px; }
 .m-card.m-sel { border: 1px solid #409eff; }

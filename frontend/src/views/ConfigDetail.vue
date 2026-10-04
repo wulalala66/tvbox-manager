@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
   listSites, publishConfig, publishVerify, publishHistory, publishRollback, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
-  checkAllSites as checkSites,
+  checkAllSites as checkSites, listSources,
 } from '../api'
 
 const route = useRoute()
@@ -268,6 +268,14 @@ const parsesRows = ref([])
 const adsRows = ref([])     // [{v}] → gf.ads: [域名]
 const rulesRows = ref([])   // [{name,hosts,regex,exclude,script}] → gf.rules
 const danmakuUrl = ref('')  // → gf.danmaku
+// 源库 jar 文件列表（全局 spider 下拉选择用）
+const jarFiles = ref([])
+async function loadJars() {
+  try {
+    const r = await listSources({ kind: 'jar', page_size: 500 })
+    jarFiles.value = (r.items || r || []).filter(s => s.kind === 'jar')
+  } catch { jarFiles.value = [] }
+}
 // 内置常用嗅探/去广告规则模板（FongMi 社区常见配置）
 const RULE_TEMPLATES = [
   { name: '通用视频嗅探', hosts: '', regex: 'http(.+?)\\.(m3u8|mp4|flv|avi|mkv|mpeg|mov|ts|3gp|rm|rmvb|wmv)(.*)', exclude: '', script: '' },
@@ -402,7 +410,7 @@ async function saveStructured() {
   await saveBase()
 }
 
-onMounted(load)
+onMounted(() => { load(); loadJars() })
 </script>
 
 <template>
@@ -427,7 +435,15 @@ onMounted(load)
       <el-form label-width="88px" size="small" class="cfg-form" :label-position="isMobile ? 'top' : 'right'">
         <el-form-item label="名称"><el-input v-model="editForm.name" /></el-form-item>
         <el-form-item label="slug"><el-input v-model="editForm.slug" /></el-form-item>
-        <el-form-item label="全局 spider"><el-input v-model="editForm.global_spider" placeholder="./jar/spider.jar" /></el-form-item>
+        <el-form-item label="全局 spider">
+          <div style="display:flex;gap:8px;width:100%">
+            <el-select v-model="editForm.global_spider" filterable allow-create default-first-option
+              placeholder="从源库选择 jar 或手动输入路径" style="flex:1">
+              <el-option v-for="j in jarFiles" :key="j.id" :label="`./jar/${j.filename}（${j.name}）`" :value="`./jar/${j.filename}`" />
+            </el-select>
+          </div>
+          <div v-if="editForm.global_spider" class="spider-hint">当前：{{ editForm.global_spider }}</div>
+        </el-form-item>
         <el-form-item label="壁纸 wallpaper"><el-input v-model="editForm.wallpaper" placeholder="桌布图片/视频 URL（可选，FongMi 顶层字段）" /></el-form-item>
         <el-form-item label="Logo"><el-input v-model="editForm.app_logo" placeholder="应用 Logo 图片 URL（可选）" /></el-form-item>
         <el-form-item label="启动公告"><el-input v-model="editForm.notice" placeholder="启动时显示的文字公告（可选）" maxlength="200" show-word-limit /></el-form-item>
@@ -761,6 +777,7 @@ onMounted(load)
 .st-row .st-type { width: 190px; }
 .rule-row { border: 1px dashed #dcdfe6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
 .live-block { border: 1px dashed #dcdfe6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.spider-hint { font-size: 12px; color: #909399; margin-top: 4px; width: 100%; }
 .lp-sample { margin-top: 10px; }
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
