@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
   listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats,
+  checkAllSites as checkSites,
 } from '../api'
 
 const route = useRoute()
@@ -238,6 +239,19 @@ async function showStats() {
   statsLoading.value = false
 }
 
+const rechecking = ref(false)
+async function recheckSites() {
+  if (!cfg.value?.sites?.length) return
+  rechecking.value = true
+  try {
+    const ids = cfg.value.sites.map(s => s.id)
+    const r = await checkSites({ site_ids: ids })
+    ElMessage.success(`重测完成：${r.ok} 正常 / ${r.fail} 失效`)
+    load()
+  } catch (e) { ElMessage.error(e.message) }
+  rechecking.value = false
+}
+
 onMounted(load)
 </script>
 
@@ -279,7 +293,13 @@ onMounted(load)
     </el-card>
 
     <el-card class="card-block" shadow="never">
-      <template #header>方案站点（{{ cfg.sites.length }}）</template>
+      <template #header>
+        <div style="display:flex;align-items:center">
+          <span>方案站点（{{ cfg.sites.length }}）</span>
+          <div style="flex:1"></div>
+          <el-button size="small" :loading="rechecking" @click="recheckSites">🔄 重测本方案</el-button>
+        </div>
+      </template>
       <div class="add-row">
         <el-select v-model="selectedSites" multiple filterable collapse-tags collapse-tags-tooltip
                    placeholder="选择要加入的站点（可多选）" style="flex:1; max-width: 380px">
