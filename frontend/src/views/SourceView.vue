@@ -80,6 +80,11 @@ const syntaxStatus = computed(() => {
   return null
 })
 
+async function copyAll() {
+  try { await navigator.clipboard.writeText(content.value); ElMessage.success(`已复制 ${content.value.length} 字符`) }
+  catch { ElMessage.error('复制失败（浏览器剪贴板权限）') }
+}
+
 async function save() {
   if (!dirty.value) { ElMessage.info('内容未修改，无需保存'); return }
   if (syntaxStatus.value?.level === 'bad' &&
@@ -152,6 +157,7 @@ onBeforeRouteLeave(() => {
                   class="code-editor" />
         <div style="margin-top: 10px; text-align: right; display: flex; gap: 8px; justify-content: flex-end">
           <el-button @click="formatJson" v-if="info.filename.endsWith('.json')">整理 JSON</el-button>
+          <el-button @click="copyAll">复制全文</el-button>
           <el-button type="primary" :loading="saving" :disabled="!dirty" @click="save">保存（生成新版本）</el-button>
         </div>
       </el-tab-pane>
