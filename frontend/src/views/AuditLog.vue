@@ -64,14 +64,14 @@ onMounted(load)
 
     <div class="table-wrap">
       <el-table :data="filtered" v-loading="loading" size="small" stripe>
-        <el-table-column prop="time" label="时间" width="170" />
-        <el-table-column prop="ip" label="IP" width="140" />
-        <el-table-column label="事件" width="160">
+        <el-table-column prop="time" label="时间" width="150" />
+        <el-table-column prop="ip" label="IP" width="110" />
+        <el-table-column label="事件" width="110">
           <template #default="{ row }">
             <el-tag :type="eventTagType(row.event)" size="small">{{ row.event }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="detail" label="详情" />
+        <el-table-column prop="detail" label="详情" min-width="120" />
       </el-table>
     </div>
     <div v-if="!loading && !filtered.length" class="empty">暂无日志</div>
