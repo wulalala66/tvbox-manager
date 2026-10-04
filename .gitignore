@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+
+# 构建产物（可由 src 重新构建）
+frontend/dist/
+
+# 运行时数据（有独立备份机制 /backup）
+data/
+*.log
+
+# 编辑器
+.idea/
+.vscode/
