@@ -262,6 +262,14 @@ async def backup_restore(request: Request, file: UploadFile = File(...)):
         cleaned.append((info, rel))
 
     # 2) 还原前安全快照（当前 data/ 打包留存到 data/backups/pre_restore_*，可人工回退）
+    #    顺带清理 7 天前的旧快照，防止无限堆积
+    cutoff = _dt.datetime.now() - _dt.timedelta(days=7)
+    for old in (DATA_DIR / "backups").glob("pre_restore_*"):
+        try:
+            if _dt.datetime.strptime(old.name, "pre_restore_%Y%m%d_%H%M%S") < cutoff:
+                shutil.rmtree(old, ignore_errors=True)
+        except ValueError:
+            pass
     snap_dir = DATA_DIR / "backups" / f"pre_restore_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     snap_dir.mkdir(parents=True, exist_ok=True)
     for p in DATA_DIR.rglob("*"):
