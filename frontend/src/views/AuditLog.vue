@@ -62,22 +62,26 @@ onMounted(load)
       </div>
     </div>
 
-    <el-table :data="filtered" v-loading="loading" size="small" stripe>
-      <el-table-column prop="time" label="时间" width="170" />
-      <el-table-column prop="ip" label="IP" width="140" />
-      <el-table-column label="事件" width="160">
-        <template #default="{ row }">
-          <el-tag :type="eventTagType(row.event)" size="small">{{ row.event }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="detail" label="详情" />
-    </el-table>
+    <div class="table-wrap">
+      <el-table :data="filtered" v-loading="loading" size="small" stripe>
+        <el-table-column prop="time" label="时间" width="170" />
+        <el-table-column prop="ip" label="IP" width="140" />
+        <el-table-column label="事件" width="160">
+          <template #default="{ row }">
+            <el-tag :type="eventTagType(row.event)" size="small">{{ row.event }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="detail" label="详情" />
+      </el-table>
+    </div>
     <div v-if="!loading && !filtered.length" class="empty">暂无日志</div>
   </div>
 </template>
 
 <style scoped>
-.page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 640px) { .page-head .actions { width: 100%; justify-content: flex-start; } }
 .actions { display: flex; gap: 8px; }
+.table-wrap { overflow-x: auto; }
 .empty { text-align: center; color: #7a8ba0; padding: 24px 0; }
 </style>
