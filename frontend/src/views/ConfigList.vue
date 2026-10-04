@@ -96,6 +96,20 @@ async function copyLink(c) {
   catch { ElMessageBox.alert(url, '订阅链接（请手动复制）', { confirmButtonText: '关闭' }) }
 }
 
+const qrDialog = ref(false)
+const qrDataUrl = ref('')
+const qrName = ref('')
+async function showQr(c) {
+  if (!c.share_token) { ElMessage.warning('尚未发布，无订阅链接'); return }
+  const url = `${location.origin}/configs/${c.id}/download?token=${c.share_token}`
+  try {
+    const QRCode = (await import('qrcode')).default
+    qrDataUrl.value = await QRCode.toDataURL(url, { width: 240, margin: 2 })
+    qrName.value = c.name
+    qrDialog.value = true
+  } catch (e) { ElMessage.error('二维码生成失败: ' + e.message) }
+}
+
 onMounted(load)
 </script>
 
@@ -117,6 +131,7 @@ onMounted(load)
         <div class="m-foot">
           <el-button size="small" type="primary" plain @click.stop="publish(c)">发布</el-button>
           <el-button size="small" @click.stop="copyLink(c)">订阅</el-button>
+          <el-button size="small" @click.stop="showQr(c)">二维码</el-button>
           <el-button size="small" type="warning" plain @click.stop="duplicate(c)">复制</el-button>
           <el-button size="small" type="danger" plain @click.stop="remove(c)">删除</el-button>
         </div>
@@ -149,6 +164,7 @@ onMounted(load)
           <el-button size="small" @click="router.push(`/configs/${row.id}`)">编辑</el-button>
           <el-button size="small" type="success" plain @click="publish(row)">发布</el-button>
           <el-button size="small" @click="copyLink(row)">订阅链接</el-button>
+          <el-button size="small" @click="showQr(row)">二维码</el-button>
           <el-button size="small" type="warning" plain @click.stop="duplicate(row)">复制</el-button>
           <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
         </template>
@@ -171,6 +187,15 @@ onMounted(load)
         <el-button @click="dialog = false">取消</el-button>
         <el-button type="primary" @click="create">创建</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="qrDialog" :title="`订阅二维码 · ${qrName}`" width="300px" align-center>
+      <div style="text-align: center">
+        <img v-if="qrDataUrl" :src="qrDataUrl" alt="订阅二维码" style="width: 240px; height: 240px" />
+        <p style="color: #909399; font-size: 12px; margin-top: 8px; word-break: break-all">
+          TVBox 扫码或输入订阅链接即可导入
+        </p>
+      </div>
     </el-dialog>
   </div>
 </template>
