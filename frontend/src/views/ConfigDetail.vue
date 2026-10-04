@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
   listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats,
@@ -137,6 +137,13 @@ async function publish() {
     const r = await publishConfig(id)
     shareInfo.value = r
     ElMessage.success(`已发布 ${r.site_count} 个站点${r.encrypted ? '（2423 加密）' : ''}`)
+    if (Array.isArray(r.unhealthy) && r.unhealthy.length) {
+      ElMessageBox.alert(
+        r.unhealthy.map(u => `• ${u.name}（${u.key}）：${u.message}`).join('\n'),
+        `警告：${r.unhealthy.length} 个站点近次测活失败（已照常发布）`,
+        { type: 'warning', customStyle: { whiteSpace: 'pre-line' }, confirmButtonText: '知道了' }
+      ).catch(() => {})
+    }
     load()
   } catch (e) { ElMessage.error(e.message) }
 }

@@ -296,6 +296,15 @@ def publish(config_id: int, session: Session = Depends(get_session)):
     data = build_vod_json(session, c)
     if not data.get("sites"):
         raise HTTPException(400, "方案中没有启用站点，无法发布")
+    # 发布健康提示：方案内近次测活失败的站点（不阻断发布，仅提示）
+    from ..models import Site
+    _cfg_links = session.exec(select(ConfigSite).where(ConfigSite.config_id == c.id)).all()
+    unhealthy = []
+    for l in _cfg_links:
+        row = session.get(Site, l.site_id)
+        if row and row.enabled and row.last_test_result and not row.last_test_result.get("ok"):
+            unhealthy.append({"key": row.key, "name": row.name,
+                              "message": (row.last_test_result.get("message") or "")[:80]})
     plain = json.dumps(data, ensure_ascii=False, indent=2)
     pub_dir = CONFIGS_DIR / "published"
     pub_dir.mkdir(parents=True, exist_ok=True)
@@ -319,6 +328,7 @@ def publish(config_id: int, session: Session = Depends(get_session)):
     session.refresh(c)
     return {"ok": True, "path": str(path), "site_count": len(data["sites"]),
             "encrypted": bool(c.encrypt and c.enc_key),
+            "unhealthy": unhealthy,
             "share_token": c.share_token}
 
 
