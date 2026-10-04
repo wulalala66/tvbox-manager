@@ -5,6 +5,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listSites, createSite, updateSite, deleteSite, checkSite, checkAllSites,
   batchDeleteSites, batchEnableSites, batchAddConfigSites, batchTagSites, listConfigs, listSources,
+  importSites, exportSites,
   healthSummary as fetchHealthSummary, healthHistory as fetchHealthHistory, checkProgress as fetchCheckProgress } from '../api'
 
 const loading = ref(false)
@@ -328,6 +329,35 @@ async function batchToggle(enabled) {
 
 const configs = ref([])
 listConfigs().then(d => { configs.value = d }).catch(() => {})
+
+// ---- 批量导入 / 导出 ----
+const impDialog = ref(false)
+const impText = ref('')
+const impBusy = ref(false)
+async function doImport() {
+  if (!impText.value.trim()) return ElMessage.warning('请粘贴要导入的站点行')
+  impBusy.value = true
+  try {
+    const r = await importSites({ text: impText.value })
+    if (r.errors?.length) ElMessage.warning(`导入 ${r.created} 个，跳过 ${r.skipped} 个；${r.errors.length} 行格式错误`)
+    else ElMessage.success(`导入 ${r.created} 个，跳过 ${r.skipped} 个`)
+    impDialog.value = false
+    impText.value = ''
+    load()
+  } catch (e) { ElMessage.error(e.message) } finally { impBusy.value = false }
+}
+async function doExport() {
+  try {
+    const r = await exportSites(selected.value.length ? selected.value : null)
+    const blob = new Blob([r.text], { type: 'text/plain;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'sites_export.txt'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success(`已导出 ${r.count} 个站点`)
+  } catch (e) { ElMessage.error(e.message) }
+}
 const addCfgDialog = ref(false)
 const addCfgId = ref(null)
 function openBatchAddToConfig() {
@@ -375,6 +405,8 @@ onMounted(() => {
         <el-option v-for="t in allTags" :key="t" :label="t" :value="t" />
       </el-select>
       <div style="flex:1"></div>
+      <el-button @click="impDialog = true">批量导入</el-button>
+      <el-button @click="doExport">导出</el-button>
       <el-button :loading="checkingAll" @click="doCheckAll()">批量测活</el-button>
       <el-dropdown @command="c => doCheckAll(c)">
         <el-button :loading="checkingAll">筛选测活 ▾</el-button>
@@ -598,6 +630,17 @@ onMounted(() => {
       <template #footer>
         <el-button @click="dialog = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="impDialog" title="批量导入站点" width="min(520px, 94vw)" align-center>
+      <div style="font-size:12px;color:#909399;margin-bottom:8px">
+        每行一条：<code>名称,接口地址[,类型]</code>，类型 0=XML 1=JSON 3=Spider，省略默认 1；# 开头为注释
+      </div>
+      <el-input v-model="impText" type="textarea" :rows="8" placeholder="示例站点,http://example.com/api?ac=videolist&#10;另一个,http://b.com/api,0" />
+      <template #footer>
+        <el-button @click="impDialog = false">取消</el-button>
+        <el-button type="primary" :loading="impBusy" @click="doImport">导入</el-button>
       </template>
     </el-dialog>
 

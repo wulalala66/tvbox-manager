@@ -54,6 +54,57 @@ def create_site(body: SiteCreate, session: Session = Depends(get_session)):
     return to_out(s)
 
 
+@router.post("/import")
+def import_sites(body: dict, session: Session = Depends(get_session)):
+    """批量导入站点：text 每行一条，支持 name,url / name,url,type。type 省略默认 1（JSON 接口）；
+    # 开头为注释行；key 冲突行跳过并计数。"""
+    text = (body or {}).get("text", "")
+    lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+    if not lines:
+        raise HTTPException(400, "没有可导入的行（每行格式：name,url[,type][,notes]）")
+    created, skipped, errors = 0, 0, []
+    for i, line in enumerate(lines, 1):
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            errors.append(f"第{i}行格式错误：{line}")
+            continue
+        name, api_url = parts[0], parts[1]
+        try:
+            st = int(parts[2]) if len(parts) > 2 and parts[2] else 1
+        except ValueError:
+            st = 1
+        notes = None
+        if session.exec(select(Site).where(Site.key == name)).first():
+            skipped += 1
+            continue
+        session.add(Site(key=name, name=name, api=api_url, site_type=st, notes=notes, enabled=True))
+        created += 1
+    session.commit()
+    return {"ok": True, "created": created, "skipped": skipped, "errors": errors}
+
+
+@router.get("/export")
+def export_sites(ids: str = None, session: Session = Depends(get_session)):
+    """批量导出站点为可再导入的行格式（ids 逗号分隔；缺省导出全部）。"""
+    q = select(Site).order_by(Site.id)
+    if ids:
+        id_list = []
+        for x in ids.split(","):
+            try:
+                id_list.append(int(x.strip()))
+            except ValueError:
+                pass
+        q = q.where(Site.id.in_(id_list))
+    rows = session.exec(q).all()
+    lines = []
+    for s in rows:
+        parts = [s.key or s.name, s.api or ""]
+        if s.site_type != 1:
+            parts.append(str(s.site_type))
+        lines.append(",".join(parts))
+    return {"ok": True, "count": len(rows), "text": "\n".join(lines)}
+
+
 @router.get("/{site_id}")
 def get_site(site_id: int, session: Session = Depends(get_session)):
     s = session.get(Site, site_id)
