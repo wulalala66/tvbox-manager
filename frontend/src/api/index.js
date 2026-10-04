@@ -3,6 +3,8 @@ import http from './http'
 // 源库
 export const importSites = (body) => http.post('/sites/import', body)
 export const exportSites = (ids) => http.get('/sites/export', { params: ids ? { ids: ids.join(',') } : {} })
+export const parseLive = (body) => http.post('/lives/parse', body)
+export const fetchLive = (body) => http.post('/lives/fetch', body)
 export const listSources = (params) => http.get('/sources', { params })
 export const uploadSources = (formData, overwrite = false) =>
   http.post('/sources/upload' + (overwrite ? '?overwrite=true' : ''), formData)

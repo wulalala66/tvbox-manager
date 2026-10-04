@@ -7,7 +7,7 @@ import http from './api/http'
 const route = useRoute()
 const router = useRouter()
 const active = computed(() => route.path)
-const titles = { '/sites': '站点管理', '/sources': '源库', '/configs': '配置方案', '/import': '导入', '/audit': '审计日志' }
+const titles = { '/sites': '站点管理', '/sources': '源库', '/configs': '配置方案', '/import': '导入', '/lives': '直播源', '/audit': '审计日志' }
 
 async function logout() {
   try { await http.post('/logout') } catch { /* ignore */ }
@@ -109,6 +109,7 @@ async function doChangePw() {
         <router-link to="/sources" class="nav-item" :class="{ on: active.startsWith('/sources') }">📁 源库</router-link>
         <router-link to="/configs" class="nav-item" :class="{ on: active.startsWith('/configs') }">🗂️ 配置方案</router-link>
         <router-link to="/import" class="nav-item" :class="{ on: active.startsWith('/import') }">📥 导入</router-link>
+        <router-link to="/lives" class="nav-item" :class="{ on: active.startsWith('/lives') }">📺 直播源</router-link>
         <router-link to="/audit" class="nav-item" :class="{ on: active.startsWith('/audit') }">📋 审计日志</router-link>
         <div class="nav-sep"></div>
         <a href="javascript:void 0" class="nav-item" @click="downloadBackup">
@@ -129,6 +130,7 @@ async function doChangePw() {
           <router-link to="/sources" class="m-nav" :class="{ on: active.startsWith('/sources') }">源库</router-link>
           <router-link to="/configs" class="m-nav" :class="{ on: active.startsWith('/configs') }">方案</router-link>
           <router-link to="/import" class="m-nav" :class="{ on: active.startsWith('/import') }">导入</router-link>
+          <router-link to="/lives" class="m-nav" :class="{ on: active.startsWith('/lives') }">直播</router-link>
           <a href="javascript:void 0" class="m-nav" @click="downloadBackup">备份</a>
           <a href="javascript:void 0" class="m-nav" @click="openRestore">恢复</a>
         </div>

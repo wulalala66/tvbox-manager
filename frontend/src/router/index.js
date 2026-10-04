@@ -9,6 +9,7 @@ const routes = [
   { path: '/configs', name: 'configs', component: () => import('../views/ConfigList.vue'), meta: { title: '配置方案' } },
   { path: '/configs/:id', name: 'config-detail', component: () => import('../views/ConfigDetail.vue'), meta: { title: '方案详情' } },
   { path: '/import', name: 'import', component: () => import('../views/ImportWizard.vue'), meta: { title: '导入' } },
+  { path: '/lives', name: 'lives', component: () => import('../views/LiveList.vue'), meta: { title: '直播源' } },
   { path: '/audit', name: 'audit', component: () => import('../views/AuditLog.vue'), meta: { title: '审计日志' } },
   { path: '/:pathMatch(.*)*', redirect: '/sites' }, // 404 兜底：未知路径回站点页
 ]

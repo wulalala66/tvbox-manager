@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .config import SOURCES_DIR
 from .database import init_db
-from .routers import configs, health, importer, sites, sources
+from .routers import configs, health, importer, lives, sites, sources
 from .security import (ADMIN_USER, _audit, _clear_login_failures,
                        _rate_limit_login, _record_login_failure, create_session,
                        drop_session, require_auth, set_password, verify_credentials)
@@ -371,6 +371,7 @@ app.include_router(health.router)
 app.include_router(health.summary_router)
 app.include_router(configs.router)
 app.include_router(importer.router)
+app.include_router(lives.router)
 
 
 # ---- TVBox 静态源托管：配置里 ./py/x.py ./jar/x.jar 等相对路径必须能直接下载 ----

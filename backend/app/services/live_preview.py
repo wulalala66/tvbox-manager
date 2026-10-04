@@ -50,8 +50,12 @@ def _parse_m3u(text: str) -> list:
 
 
 def _parse_json(text: str) -> list:
-    """FongMi live json：[{group:"分组",channels:[{name,urls:[]}]}]"""
+    """FongMi live json：{lives:[{group,channels:[{name,urls:[]}]}]} 或直接数组"""
     doc = json.loads(text)
+    if isinstance(doc, dict):
+        doc = doc.get('lives') or []
+    if not isinstance(doc, list):
+        raise ValueError('live json 顶层需为对象数组或 {lives:[...]}')
     out = []
     for g in doc:
         chs = []
