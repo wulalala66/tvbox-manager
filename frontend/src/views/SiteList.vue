@@ -486,6 +486,7 @@ onMounted(() => {
         </div>
         <div class="m-key">key: {{ s.key }}</div>
         <div class="m-api">{{ s.api }}</div>
+        <div v-if="s.ext && s.ext.trim()" class="m-ext">ext: {{ s.ext.length > 60 ? s.ext.slice(0, 60) + '…' : s.ext }}</div>
         <div v-if="s.last_test_result && !s.last_test_result.ok" class="m-errmsg">{{ s.last_test_result.message }}</div>
         <div class="m-meta">
           <el-switch v-model="s.enabled" size="small" @change="toggle(s)" />
@@ -530,6 +531,12 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="api" label="api" min-width="200" show-overflow-tooltip />
+      <el-table-column label="ext" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.ext && row.ext.trim()" style="font-size:12px;color:#909399">{{ row.ext }}</span>
+          <span v-else style="color:#c0c4cc">—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="启用" width="80">
         <template #default="{ row }">
           <el-switch v-model="row.enabled" size="small" @change="toggle(row)" />
@@ -671,6 +678,7 @@ onMounted(() => {
 .m-name { font-weight: 600; flex: 1; }
 .m-key { color: #909399; font-size: 12px; margin-top: 4px; }
 .m-api { color: #606266; font-size: 12px; margin-top: 2px; word-break: break-all; }
+.m-ext { color: #909399; font-size: 11px; margin-top: 2px; word-break: break-all; }
 .m-meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .m-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .m-actions .el-button { width: 100%; margin-left: 0; height: 32px; }

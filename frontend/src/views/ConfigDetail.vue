@@ -268,6 +268,12 @@ const parsesRows = ref([])
 const adsRows = ref([])     // [{v}] → gf.ads: [域名]
 const rulesRows = ref([])   // [{name,hosts,regex,exclude,script}] → gf.rules
 const danmakuUrl = ref('')  // → gf.danmaku
+// 顶层网络/平台小字段（FongMi Vod 顶层，后端零改动透传）
+const flagsRows = ref([])   // [{v}] → gf.flags: ['qq',...]
+const hostRows = ref([])    // [{v}] → gf.hosts: ['origin=target',...]（支持 * 通配）
+const headerRows = ref([])  // [{k,v}] → gf.headers: [{host,header:{}}]
+const dohRows = ref([])     // [{name,url,ips}] → gf.doh
+const proxyRows = ref([])   // [{name,hosts,urls}] → gf.proxy
 // 源库 jar 文件列表（全局 spider 下拉选择用）
 const jarFiles = ref([])
 async function loadJars() {
@@ -295,7 +301,7 @@ function loadStructured() {
   livesRows.value = Array.isArray(gf.lives) ? gf.lives.map(l => ({
     name: l.name || '', url: l.url || '', epg: l.epg || '', ua: l.ua || '',
     timeZone: l.timeZone || '', boot: !!l.boot,
-    catchup_type: l.catchup?.type || '', catchup_source: l.catchup?.source || '', catchup_regex: l.catchup?.regex || '',
+    catchup_type: l.catchup?.type || '', catchup_source: l.catchup?.source || '', catchup_regex: l.catchup?.regex || '', catchup_replace: l.catchup?.replace || '',
   })) : []
   parsesRows.value = Array.isArray(gf.parses) ? gf.parses.map(p => ({
     name: p.name || '', type: Number(p.type ?? 1), url: p.url || '',
@@ -309,12 +315,22 @@ function loadStructured() {
     script: r.script || '',
   })) : []
   danmakuUrl.value = typeof gf.danmaku === 'string' ? gf.danmaku : ''
+  flagsRows.value = Array.isArray(gf.flags) ? gf.flags.map(a => ({ v: String(a) })) : []
+  hostRows.value = Array.isArray(gf.hosts) ? gf.hosts.map(a => ({ v: String(a) })) : []
+  headerRows.value = Array.isArray(gf.headers) ? gf.headers.map(h => ({ k: h.host || '', v: h.header ? JSON.stringify(h.header) : '' })) : []
+  dohRows.value = Array.isArray(gf.doh) ? gf.doh.map(d => ({ name: d.name || '', url: d.url || '', ips: Array.isArray(d.ips) ? d.ips.join(',') : '' })) : []
+  proxyRows.value = Array.isArray(gf.proxy) ? gf.proxy.map(p => ({ name: p.name || '', hosts: Array.isArray(p.hosts) ? p.hosts.join(',') : '', urls: Array.isArray(p.urls) ? p.urls.join(',') : '' })) : []
 }
 
-function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '', timeZone: '', boot: false, catchup_type: '', catchup_source: '', catchup_regex: '' }) }
+function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '', timeZone: '', boot: false, catchup_type: '', catchup_source: '', catchup_regex: '', catchup_replace: '' }) }
 function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
 function addAd() { adsRows.value.push({ v: '' }) }
 function addRule(t) { rulesRows.value.push(t ? { ...t } : { name: '', hosts: '', regex: '', exclude: '', script: '' }) }
+function addFlag() { flagsRows.value.push({ v: '' }) }
+function addHost() { hostRows.value.push({ v: '' }) }
+function addHeader() { headerRows.value.push({ k: '', v: '' }) }
+function addDoh() { dohRows.value.push({ name: '', url: '', ips: '' }) }
+function addProxy() { proxyRows.value.push({ name: '', hosts: '', urls: '' }) }
 
 // ---- 直播源预览（抓取 + 解析格式验证）----
 const lpVisible = ref(false)
@@ -375,6 +391,7 @@ async function saveStructured() {
     timeZone: r.timeZone.trim() || undefined, boot: r.boot || undefined,
     catchup: (r.catchup_source.trim() || r.catchup_type) ? cleanObj({
       type: r.catchup_type.trim() || undefined, source: r.catchup_source.trim() || undefined, regex: r.catchup_regex.trim() || undefined,
+      replace: r.catchup_replace.trim() || undefined,
     }) : undefined,
   }))
   const parses = []
@@ -406,6 +423,28 @@ async function saveStructured() {
     fields.rules = rules
   } else delete fields.rules
   if (danmakuUrl.value.trim()) fields.danmaku = danmakuUrl.value.trim(); else delete fields.danmaku
+  // 顶层网络/平台小字段（FongMi Vod 顶层）
+  const flags = flagsRows.value.map(r => r.v.trim()).filter(Boolean).flatMap(v => v.split(/[,，]/).map(x => x.trim()).filter(Boolean))
+  if (flags.length) fields.flags = flags; else delete fields.flags
+  const hosts = hostRows.value.filter(r => r.v.trim()).map(r => r.v.trim())
+  for (const h of hosts) {
+    if (!h.includes('=')) { ElMessage.error(`hosts 项「${h}」缺少 = 分隔（格式 origin=target，支持 * 通配），未保存`); return }
+  }
+  if (hosts.length) fields.hosts = hosts; else delete fields.hosts
+  const headers = headerRows.value.filter(r => r.k.trim()).map(r => ({ host: r.k.trim(), header: (() => { try { return JSON.parse(r.v || '{}') } catch { throw new Error(`headers 项「${r.k.trim()}」的 header 不是合法 JSON，未保存`) } })() }))
+  try { for (const h of headers) if (typeof h.header !== 'object') throw new Error(`headers 项「${h.host}」的 header 需为 JSON 对象，未保存`) } catch (e) { ElMessage.error(e.message); return }
+  if (headers.length) fields.headers = headers; else delete fields.headers
+  const dohs = dohRows.value.filter(r => r.name.trim() && r.url.trim()).map(r => cleanObj({
+    name: r.name.trim(), url: r.url.trim(),
+    ips: r.ips.trim() ? r.ips.split(/[,，]/).map(x => x.trim()).filter(Boolean) : undefined,
+  }))
+  if (dohs.length) fields.doh = dohs; else delete fields.doh
+  const proxies = proxyRows.value.filter(r => r.hosts.trim() || r.urls.trim()).map(r => cleanObj({
+    name: r.name.trim(),
+    hosts: r.hosts.trim() ? r.hosts.split(/[,，]/).map(x => x.trim()).filter(Boolean) : undefined,
+    urls: r.urls.trim() ? r.urls.split(/[,，]/).map(x => x.trim()).filter(Boolean) : undefined,
+  }))
+  if (proxies.length) fields.proxy = proxies; else delete fields.proxy
   editForm.value.global_fields = JSON.stringify(fields, null, 2)
   await saveBase()
 }
@@ -498,6 +537,7 @@ onMounted(() => { load(); loadJars() })
             </el-select>
             <el-input v-model="l.catchup_source" placeholder="回看 url 模板，如 ?playseek=${(b)yyyyMMddHHmmss}-${(e)yyyyMMddHHmmss}（可选）" class="st-url" />
             <el-input v-model="l.catchup_regex" placeholder="回看生效条件 regex（可选）" class="st-epg" />
+            <el-input v-model="l.catchup_replace" placeholder="替换对「原,新」先替换原 url 再拼 source（可选）" class="st-epg" />
           </div>
         </div>
         <el-empty v-if="!livesRows.length" description="无直播源，点右上「+ 直播源」添加" :image-size="50" />
@@ -554,6 +594,41 @@ onMounted(() => { load(); loadJars() })
         <div class="st-row">
           <el-input v-model="danmakuUrl" placeholder="弹幕接口 url，含 {name}/{episode} 占位走 GET，否则 POST form（可选）" class="st-url" />
         </div>
+      </div>
+
+      <div class="st-sec">
+        <div class="st-title">网络 / 平台扩展字段（FongMi 顶层）</div>
+        <div class="st-tip">flags 平台旗标 · hosts 域名解析覆盖（origin=target，支持 *）· headers 注入响应头解 CORS · doh 加密 DNS 防污染 · proxy 指定域名走代理</div>
+        <div v-for="(r, i) in flagsRows" :key="'f' + i" class="st-row">
+          <el-input v-model="r.v" placeholder="旗标，如 qq / iqiyi" class="st-name" />
+          <el-button size="small" type="danger" text @click="flagsRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addFlag()">+ 旗标</el-button>
+        <div v-for="(r, i) in hostRows" :key="'h' + i" class="st-row">
+          <el-input v-model="r.v" placeholder="origin=target（支持 *，如 *.example.com=1.2.3.4）" class="st-url" />
+          <el-button size="small" type="danger" text @click="hostRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addHost()">+ hosts</el-button>
+        <div v-for="(r, i) in headerRows" :key="'hd' + i" class="st-row">
+          <el-input v-model="r.k" placeholder="域名 host" class="st-name" />
+          <el-input v-model="r.v" placeholder='header JSON 对象，如 {"Referer":"https://x.com"}' class="st-url" />
+          <el-button size="small" type="danger" text @click="headerRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addHeader()">+ headers</el-button>
+        <div v-for="(r, i) in dohRows" :key="'d' + i" class="st-row">
+          <el-input v-model="r.name" placeholder="名称" class="st-name" />
+          <el-input v-model="r.url" placeholder="DoH url，如 https://dns.alidns.com/dns-query" class="st-url" />
+          <el-input v-model="r.ips" placeholder="bootstrap IP 逗号分隔（可选）" class="st-epg" />
+          <el-button size="small" type="danger" text @click="dohRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addDoh()">+ DoH</el-button>
+        <div v-for="(r, i) in proxyRows" :key="'p' + i" class="st-row">
+          <el-input v-model="r.name" placeholder="名称" class="st-name" />
+          <el-input v-model="r.hosts" placeholder="域名正则 逗号分隔" class="st-url" />
+          <el-input v-model="r.urls" placeholder="代理 url 逗号分隔（http/socks）" class="st-url" />
+          <el-button size="small" type="danger" text @click="proxyRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-button size="small" text type="primary" @click="addProxy()">+ 代理</el-button>
       </div>
 
       <el-dialog v-model="dgVisible" title="配置诊断" width="640px">
