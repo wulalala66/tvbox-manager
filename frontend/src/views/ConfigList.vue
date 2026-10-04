@@ -143,6 +143,8 @@ onMounted(load)
           <el-button size="small" type="primary" plain @click.stop="publish(c)">发布</el-button>
           <el-button size="small" @click.stop="copyLink(c)">订阅</el-button>
           <el-button size="small" @click.stop="copyFull(c)">链接+密钥</el-button>
+        </div>
+        <div class="m-foot m-foot2">
           <el-button size="small" @click.stop="showQr(c)">二维码</el-button>
           <el-button size="small" type="warning" plain @click.stop="duplicate(c)">复制</el-button>
           <el-button size="small" type="danger" plain @click.stop="remove(c)">删除</el-button>
