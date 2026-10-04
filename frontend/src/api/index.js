@@ -34,6 +34,8 @@ export const addConfigSite = (id, siteId) => http.post(`/configs/${id}/sites/${s
 export const removeConfigSite = (id, siteId) => http.delete(`/configs/${id}/sites/${siteId}`)
 export const publishConfig = (id) => http.post(`/configs/${id}/publish`)
 export const publishVerify = (id) => http.post(`/configs/${id}/publish-verify`)
+export const publishHistory = (id) => http.get(`/configs/${id}/publish-history`)
+export const publishRollback = (id, file) => http.post(`/configs/${id}/publish-rollback`, { file })
 export const previewLive = (id, url) => http.post(`/configs/${id}/live-preview`, { url })
 export const getConfigKey = (id) => http.get(`/configs/${id}/key`)
 export const previewConfig = (id) => http.get(`/configs/${id}/preview`)

@@ -322,6 +322,16 @@ def publish(config_id: int, session: Session = Depends(get_session)):
     pub_dir = CONFIGS_DIR / "published"
     pub_dir.mkdir(parents=True, exist_ok=True)
     path = pub_dir / f"{c.slug}.json"
+    # 发布历史快照：旧产物存 history/{slug}/（保留最近 10 份，密文原样保存保证可解密）
+    hist_dir = CONFIGS_DIR / "history" / c.slug
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        old = path.read_text(encoding="utf-8")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        (hist_dir / f"{ts}.json").write_text(old, encoding="utf-8")
+        snaps = sorted(hist_dir.glob("*.json"))
+        for s in snaps[:-10]:
+            s.unlink(missing_ok=True)
     if c.encrypt:
         if not c.enc_key:
             # 加密开但 key 缺失：自动生成 16 位随机 key 并持久化（防"以为加密实际明文"）
@@ -427,10 +437,51 @@ def publish_verify(config_id: int, session: Session = Depends(get_session)):
     }
 
 
+@router.get("/{config_id}/publish-history")
+def publish_history(config_id: int, session: Session = Depends(get_session)):
+    """发布历史快照列表（密文状态标注 + 站点数 + 字节数）"""
+    c = _get(session, config_id)
+    hist_dir = CONFIGS_DIR / "history" / c.slug
+    if not hist_dir.exists():
+        return {"ok": True, "items": []}
+    items = []
+    for s in sorted(hist_dir.glob("*.json"), reverse=True):
+        raw = s.read_text(encoding="utf-8")
+        sites = None
+        if not raw.startswith("2423"):
+            try:
+                sites = len(json.loads(raw).get("sites", []))
+            except Exception:
+                sites = None
+        items.append({"file": s.name, "ts": s.stem.replace("_", " "), "bytes": len(raw),
+                      "encrypted": raw.startswith("2423"), "sites": sites})
+    return {"ok": True, "items": items}
+
+
+@router.post("/{config_id}/publish-rollback")
+def publish_rollback(config_id: int, body: dict, session: Session = Depends(get_session)):
+    """回滚到指定历史快照：把 history/{slug}/{file} 复制回 published/{slug}.json。
+    当前产物先快照到 history，避免回滚操作本身丢数据。"""
+    c = _get(session, config_id)
+    fname = (body or {}).get("file", "")
+    if not fname or "/" in fname or "\\" in fname or not fname.endswith(".json"):
+        raise HTTPException(400, "非法文件名")
+    src = (CONFIGS_DIR / "history" / c.slug / fname).resolve()
+    if not str(src).startswith(str((CONFIGS_DIR / "history").resolve()) + "/") or not src.exists():
+        raise HTTPException(404, "快照不存在")
+    pub_dir = CONFIGS_DIR / "published"
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    dst = pub_dir / f"{c.slug}.json"
+    # 当前产物先入历史
+    if dst.exists():
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        (CONFIGS_DIR / "history" / c.slug / f"{ts}.json").write_text(dst.read_text(encoding="utf-8"), encoding="utf-8")
+    dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    return {"ok": True, "file": fname, "bytes": dst.stat().st_size}
+
+
 @router.post("/{config_id}/live-preview")
 def live_preview(config_id: int, body: dict, session: Session = Depends(get_session)):
-    """直播源预览：抓取 url 解析 txt/m3u/json 格式，返回分组/频道统计与样例。
-    用于在配置直播源前验证地址可用、格式正确、频道数合理。"""
     _get(session, config_id)
     url = (body or {}).get("url", "").strip()
     if not url:

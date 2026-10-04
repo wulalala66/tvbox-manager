@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
+  listSites, publishConfig, publishVerify, publishHistory, publishRollback, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
   checkAllSites as checkSites,
 } from '../api'
 
@@ -303,6 +303,25 @@ async function doLivePreview(l) {
   } catch (e) { lpError.value = e.message } finally { lpLoading.value = false }
 }
 
+// ---- 发布历史 + 回滚 ----
+const histVisible = ref(false)
+const histLoading = ref(false)
+const histItems = ref([])
+async function showHistory() {
+  histVisible.value = true; histLoading.value = true
+  try { histItems.value = (await publishHistory(id)).items }
+  catch (e) { ElMessage.error(e.message) } finally { histLoading.value = false }
+}
+async function doRollback(file) {
+  try {
+    await ElMessageBox.confirm('将当前发布产物覆盖为该历史快照（当前产物本身也会先存入历史），确定回滚？', '回滚确认', { type: 'warning' })
+  } catch { return }
+  const r = await publishRollback(id, file)
+  ElMessage.success(`已回滚到 ${r.file}（${r.bytes} 字节）`)
+  await showHistory()
+  await load()
+}
+
 function cleanObj(o) { // 去掉空值字段
   const out = {}
   for (const [k, v] of Object.entries(o)) if (v !== '' && v !== null && v !== undefined) out[k] = v
@@ -345,6 +364,7 @@ onMounted(load)
       <div style="flex:1"></div>
       <el-button type="primary" @click="publish">发布</el-button>
       <el-button @click="doVerify" :loading="verifyLoading" v-if="cfg.published_at">解密自检</el-button>
+      <el-button @click="showHistory" v-if="cfg.published_at">发布历史</el-button>
       <el-button @click="doPreview">预览 JSON</el-button>
       <el-button @click="exportJson">导出 JSON</el-button>
       <el-button @click="showStats">统计</el-button>
@@ -415,6 +435,31 @@ onMounted(load)
         </div>
         <el-empty v-if="!parsesRows.length" description="无解析规则，点右上「+ 解析」添加" :image-size="50" />
       </div>
+
+      <el-dialog v-model="histVisible" :title="`发布历史（最近 10 份快照）`" :width="isMobile ? '96%' : '620px'">
+        <div class="hist-wrap">
+        <el-table :data="histItems" v-loading="histLoading" size="small">
+          <el-table-column prop="ts" label="快照时间 (UTC)" min-width="150" />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.encrypted ? 'warning' : 'info'" size="small">{{ row.encrypted ? '密文' : '明文' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="站点" width="70">
+            <template #default="{ row }">{{ row.sites ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column prop="bytes" label="字节" width="80" />
+          <el-table-column label="操作" width="110">
+            <template #default="{ row }">
+              <el-button size="small" type="warning" plain @click="doRollback(row.file)">回滚到此</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="!histLoading && !histItems.length" style="color:#909399;font-size:13px;padding:12px 0">
+          暂无历史快照——发布第二次起，每次发布都会把旧产物自动存档。
+        </div>
+        </div>
+      </el-dialog>
 
       <el-dialog v-model="lpVisible" title="直播源预览" width="560px">
         <template v-if="lpLoading"><el-skeleton :rows="4" animated /></template>
@@ -593,6 +638,7 @@ onMounted(load)
 .lp-sample { margin-top: 10px; }
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
+.hist-wrap { overflow-x: auto; }
 @media (max-width: 640px) {
   .st-row .st-name, .st-row .st-url, .st-row .st-epg, .st-row .st-ua, .st-row .st-type { width: 100%; min-width: 0; flex: none; }
   .st-row { gap: 4px; }
