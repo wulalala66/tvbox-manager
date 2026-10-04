@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, previewConfig, batchAddConfigSites,
+  listSites, publishConfig, previewConfig, batchAddConfigSites, previewConfigStats,
 } from '../api'
 
 const route = useRoute()
@@ -206,6 +206,19 @@ async function showShareQr() {
   } catch (e) { ElMessage.error('二维码生成失败: ' + e.message) }
 }
 
+// 方案统计（发布前 sanity check）
+const statsDialog = ref(false)
+const statsLoading = ref(false)
+const stats = ref(null)
+async function showStats() {
+  statsLoading.value = true
+  try {
+    stats.value = await previewConfigStats(id)
+    statsDialog.value = true
+  } catch (e) { ElMessage.error(e.message) }
+  statsLoading.value = false
+}
+
 onMounted(load)
 </script>
 
@@ -219,6 +232,7 @@ onMounted(load)
       <el-button type="primary" @click="publish">发布</el-button>
       <el-button @click="doPreview">预览 JSON</el-button>
       <el-button @click="exportJson">导出 JSON</el-button>
+      <el-button @click="showStats">统计</el-button>
       <el-button v-if="cfg.published_at" tag="a" :href="`/configs/${id}/download?token=${cfg.share_token}`">下载</el-button>
     </div>
 
@@ -311,6 +325,24 @@ onMounted(load)
       <div style="text-align: center">
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="订阅二维码" style="width: 240px; height: 240px" />
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="statsDialog" title="方案统计" width="min(380px, 94vw)" align-center>
+      <template v-if="stats">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="启用站点">{{ stats.sites }} 个</el-descriptions-item>
+          <el-descriptions-item label="已禁用（不进配置）">{{ stats.disabled }} 个</el-descriptions-item>
+          <el-descriptions-item label="类型分布">
+            <el-tag v-for="(n, t) in stats.types" :key="t" size="small" style="margin-right: 6px">
+              {{ typeLabel[t] || t }} × {{ n }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="全局 spider">{{ stats.has_spider ? '已配置' : '未配置' }}</el-descriptions-item>
+          <el-descriptions-item label="发布加密">{{ stats.encrypted ? '2423 加密' : '明文' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-alert v-if="!stats.sites" type="warning" :closable="false" show-icon
+                  title="方案中没有任何启用站点，发布会被拒绝" style="margin-top: 10px" />
+      </template>
     </el-dialog>
 
     <el-card v-if="preview" class="card-block" shadow="never">

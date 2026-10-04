@@ -346,3 +346,22 @@ def preview(config_id: int, session: Session = Depends(get_session)):
     # 返回美化后的文本，前端直接展示（用户要求：JSON 要有语法整理，不要一大坨）
     return Response(content=_json.dumps(build_vod_json(session, c), ensure_ascii=False, indent=2),
                     media_type="application/json")
+
+
+@router.get("/{config_id}/preview/stats")
+def preview_stats(config_id: int, session: Session = Depends(get_session)):
+    """方案编译统计：站点数/类型分布/禁用数/加密态，供发布前 sanity check"""
+    c = _get(session, config_id)
+    data = build_vod_json(session, c)
+    sites = data.get("sites", [])
+    types = {}
+    for s in sites:
+        types[str(s.get("type"))] = types.get(str(s.get("type")), 0) + 1
+    total_links = session.exec(select(ConfigSite).where(ConfigSite.config_id == c.id)).all()
+    return {
+        "sites": len(sites),
+        "disabled": len(total_links) - len(sites),
+        "types": types,
+        "has_spider": bool(data.get("spider")),
+        "encrypted": bool(c.encrypt),
+    }
