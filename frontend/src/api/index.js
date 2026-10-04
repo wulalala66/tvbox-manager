@@ -33,6 +33,7 @@ export const setConfigSites = (id, sites) => http.put(`/configs/${id}/sites`, { 
 export const addConfigSite = (id, siteId) => http.post(`/configs/${id}/sites/${siteId}`)
 export const removeConfigSite = (id, siteId) => http.delete(`/configs/${id}/sites/${siteId}`)
 export const publishConfig = (id) => http.post(`/configs/${id}/publish`)
+export const publishVerify = (id) => http.post(`/configs/${id}/publish-verify`)
 export const previewConfig = (id) => http.get(`/configs/${id}/preview`)
 export const previewConfigStats = (id) => http.get(`/configs/${id}/preview/stats`)
 export const downloadConfigUrl = (id) => `/configs/${id}/download`

@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, previewConfig, batchAddConfigSites, previewConfigStats,
+  listSites, publishConfig, publishVerify, previewConfig, batchAddConfigSites, previewConfigStats,
 } from '../api'
 
 const route = useRoute()
@@ -141,6 +141,18 @@ async function publish() {
   } catch (e) { ElMessage.error(e.message) }
 }
 
+// 发布自检：验证「发布→下载→TVBox 解密」整条链路
+const verifyResult = ref(null)
+const verifyLoading = ref(false)
+async function doVerify() {
+  verifyLoading.value = true
+  verifyResult.value = null
+  try {
+    verifyResult.value = await publishVerify(id)
+  } catch (e) { ElMessage.error(e.message) }
+  verifyLoading.value = false
+}
+
 async function doPreview() {
   try {
     const r = await previewConfig(id)
@@ -230,6 +242,7 @@ onMounted(load)
       <el-tag v-if="cfg.published_at" type="success" size="small">已发布</el-tag>
       <div style="flex:1"></div>
       <el-button type="primary" @click="publish">发布</el-button>
+      <el-button @click="doVerify" :loading="verifyLoading" v-if="cfg.published_at">解密自检</el-button>
       <el-button @click="doPreview">预览 JSON</el-button>
       <el-button @click="exportJson">导出 JSON</el-button>
       <el-button @click="showStats">统计</el-button>
@@ -344,6 +357,20 @@ onMounted(load)
                   title="方案中没有任何启用站点，发布会被拒绝" style="margin-top: 10px" />
       </template>
     </el-dialog>
+
+    <el-card v-if="verifyResult" class="card-block" shadow="never">
+      <template #header>
+        <div style="display:flex;align-items:center">
+          <span>解密自检（发布→下载→解密链路）</span>
+          <div style="flex:1"></div>
+          <el-button size="small" text @click="verifyResult = null">关闭</el-button>
+        </div>
+      </template>
+      <el-result v-if="verifyResult.ok" icon="success"
+                 :title="verifyResult.encrypted ? '密文可正常解密' : '明文 JSON 校验通过'"
+                 :sub-title="`站点 ${verifyResult.sites} 个 · ${verifyResult.bytes} 字节 · 顶层字段: ${verifyResult.top_keys.join(', ')}`" />
+      <el-result v-else icon="error" title="自检失败" :sub-title="verifyResult.error" />
+    </el-card>
 
     <el-card v-if="preview" class="card-block" shadow="never">
       <template #header>

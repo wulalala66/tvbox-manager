@@ -365,3 +365,40 @@ def preview_stats(config_id: int, session: Session = Depends(get_session)):
         "has_spider": bool(data.get("spider")),
         "encrypted": bool(c.encrypt),
     }
+
+
+@router.post("/{config_id}/publish-verify")
+def publish_verify(config_id: int, session: Session = Depends(get_session)):
+    """发布自检：读取已发布产物 → 若加密则按 2423 格式解密 → 校验 JSON 与站点数，
+    验证「发布→下载→TVBox 解密」整条链路真实可用。"""
+    c = _get(session, config_id)
+    path = (CONFIGS_DIR / "published" / f"{c.slug}.json").resolve()
+    if not str(path).startswith(str((CONFIGS_DIR / "published").resolve()) + "/"):
+        raise HTTPException(400, "非法 slug")
+    if not path.exists():
+        raise HTTPException(404, "尚未发布，请先发布")
+    raw = path.read_text(encoding="utf-8")
+    import json as _json
+    from ..services.crypto import fongmi_decode
+    if raw.startswith("2423"):
+        if not c.enc_key:
+            return {"ok": False, "encrypted": True, "error": "密文存在但方案缺少 enc_key"}
+        try:
+            plain = fongmi_decode(raw)
+        except Exception as e:
+            return {"ok": False, "encrypted": True, "error": f"解密失败: {type(e).__name__}: {e}"}
+    else:
+        plain = raw
+    try:
+        data = _json.loads(plain)
+    except Exception as e:
+        return {"ok": False, "encrypted": raw.startswith("2423"), "error": f"解密后非合法 JSON: {e}"}
+    sites = data.get("sites", [])
+    return {
+        "ok": True,
+        "encrypted": raw.startswith("2423"),
+        "sites": len(sites),
+        "has_spider": bool(data.get("spider")),
+        "top_keys": list(data.keys()),
+        "bytes": len(raw),
+    }
