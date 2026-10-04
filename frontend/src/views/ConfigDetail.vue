@@ -16,6 +16,7 @@ const selectedSites = ref([])
 const preview = ref(null)
 const saving = ref(false)
 const editForm = ref({ name: '', slug: '', global_spider: '', global_fields: '{}',
+  wallpaper: '', app_logo: '', notice: '',
   encrypt: false, enc_key: '', enc_key_set: false })
 const shareInfo = ref(null)
 
@@ -27,6 +28,9 @@ async function load() {
       name: cfg.value.name, slug: cfg.value.slug,
       global_spider: cfg.value.global_spider || '',
       global_fields: JSON.stringify(cfg.value.global_fields || {}, null, 2),
+      wallpaper: cfg.value.global_fields?.wallpaper || '',
+      app_logo: cfg.value.global_fields?.logo || '',
+      notice: cfg.value.global_fields?.notice || '',
       encrypt: !!cfg.value.encrypt, enc_key: '', enc_key_set: !!cfg.value.enc_key_set,
     }
     loadStructured()
@@ -120,6 +124,11 @@ async function saveBase() {
   try {
     let fields = {}
     try { fields = JSON.parse(editForm.value.global_fields || '{}') } catch { throw new Error('全局字段不是合法 JSON') }
+    // FongMi 顶层外观字段 → global_fields（wallpaper/logo/notice）
+    for (const k of ['wallpaper', 'logo', 'notice']) {
+      const v = (editForm.value[k] || '').trim()
+      if (v) fields[k] = v; else delete fields[k]
+    }
     await updateConfig(id, {
       name: editForm.value.name, slug: editForm.value.slug,
       global_spider: editForm.value.global_spider || null,
@@ -333,6 +342,9 @@ onMounted(load)
         <el-form-item label="名称"><el-input v-model="editForm.name" /></el-form-item>
         <el-form-item label="slug"><el-input v-model="editForm.slug" /></el-form-item>
         <el-form-item label="全局 spider"><el-input v-model="editForm.global_spider" placeholder="./jar/spider.jar" /></el-form-item>
+        <el-form-item label="壁纸 wallpaper"><el-input v-model="editForm.wallpaper" placeholder="桌布图片/视频 URL（可选，FongMi 顶层字段）" /></el-form-item>
+        <el-form-item label="Logo"><el-input v-model="editForm.app_logo" placeholder="应用 Logo 图片 URL（可选）" /></el-form-item>
+        <el-form-item label="启动公告"><el-input v-model="editForm.notice" placeholder="启动时显示的文字公告（可选）" maxlength="200" show-word-limit /></el-form-item>
         <el-form-item label="全局字段">
           <el-input v-model="editForm.global_fields" type="textarea" :rows="12" style="font-family: monospace" placeholder='如 {"lives":[...]}' />
           <div style="margin-top: 4px"><el-button size="small" @click="formatFields">整理 JSON</el-button></div>
