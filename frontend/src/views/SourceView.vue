@@ -31,6 +31,14 @@ async function load() {
   } catch (e) { ElMessage.error(e.message) }
 }
 
+// 只刷新元信息与版本历史，不动编辑器内容（避免覆盖保存后继续输入的字符）
+async function loadMeta() {
+  try {
+    info.value = await getSource(id)
+    versions.value = await getSourceVersions(id)
+  } catch (e) { ElMessage.error(e.message) }
+}
+
 const dirty = computed(() => contentLoaded.value && content.value !== savedContent.value)
 
 async function save() {
@@ -40,13 +48,14 @@ async function save() {
     await saveSourceContent(id, { content: content.value, note: '在线编辑' })
     savedContent.value = content.value
     ElMessage.success('已保存')
-    load()
+    loadMeta()
   } catch (e) { ElMessage.error(e.message) }
   saving.value = false
 }
 
 async function rollback(v) {
   try {
+    if (dirty.value && !window.confirm('有未保存的修改，回滚将覆盖编辑器内容，确定？')) return
     await rollbackSource(id, v.version)
     ElMessage.success(`已回滚到 v${v.version}`)
     load()
