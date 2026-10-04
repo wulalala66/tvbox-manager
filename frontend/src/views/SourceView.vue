@@ -17,6 +17,16 @@ const savedContent = ref('')  // 服务器上的最新内容基线，用于 dirt
 
 const isText = computed(() => info.value && info.value.kind !== 'jar')
 
+// 移动端判定（版本历史用卡片布局替代表格）
+const isMobile = ref(window.innerWidth <= 640)
+window.addEventListener('resize', () => { isMobile.value = window.innerWidth <= 640 })
+
+function fmtTs(ts) {
+  if (!ts) return ''
+  const d = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T'))
+  return isNaN(d) ? ts : d.toLocaleString('zh-CN', { hour12: false })
+}
+
 async function load() {
   try {
     info.value = await getSource(id)
@@ -167,7 +177,18 @@ onBeforeRouteLeave(() => {
       </el-tab-pane>
 
       <el-tab-pane label="版本历史" name="versions">
-        <el-table :data="versions" size="small">
+        <!-- 桌面表格 / 移动卡片双布局：el-table 470px 总宽在 390px 容器被 header-wrapper 裁剪 -->
+        <div class="ver-cards" v-if="isMobile">
+          <div class="ver-card" v-for="v in versions" :key="v.version">
+            <div class="ver-card-head">
+              <span class="ver-badge" :class="{ cur: v.version === info.current_version }">v{{ v.version }}</span>
+              <el-button size="small" type="primary" plain :disabled="v.version === info.current_version" @click="rollback(v)">回滚到此版</el-button>
+            </div>
+            <div class="ver-note">{{ v.note || '—' }}</div>
+            <div class="ver-ts">{{ fmtTs(v.created_at) }}</div>
+          </div>
+        </div>
+        <el-table v-else :data="versions" size="small">
           <el-table-column prop="version" label="版本" width="70" />
           <el-table-column prop="note" label="说明" min-width="140" />
           <el-table-column prop="created_at" label="时间" min-width="160" />
@@ -195,10 +216,18 @@ onBeforeRouteLeave(() => {
   .src-desc { overflow-x: auto; }
   .src-desc :deep(.el-descriptions__table) { table-layout: fixed; width: 100%; }
   .src-desc :deep(.el-descriptions__label) { width: 76px; }
-  .page :deep(.el-table__body) { width: 100% !important; }
-  .page :deep(.el-table__header) { width: 100% !important; }
-  .page :deep(.el-table__colgroup) { width: auto !important; }
   .page :deep(.el-textarea__inner) { font-size: 12px; }
   .ver-time { display: block; }
+
+  /* 版本历史移动卡片布局（替代表格，防裁剪溢出） */
+  .ver-cards { display: flex; flex-direction: column; gap: 8px; }
+  .ver-card { border: 1px solid #ebeef5; border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .ver-card-head { display: flex; justify-content: space-between; align-items: center; }
+  .ver-badge { font-weight: 600; font-size: 14px; color: #409eff; }
+  .ver-badge.cur { color: #67c23a; }
+  .ver-badge.cur::after { content: ' · 当前'; font-size: 12px; font-weight: 400; }
+  .ver-note { font-size: 13px; color: #606266; margin-top: 4px; word-break: break-all; }
+  .ver-ts { font-size: 12px; color: #909399; margin-top: 4px; }
 }
+@media (min-width: 641px) { .ver-cards { display: none; } }
 </style>
