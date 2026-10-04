@@ -284,7 +284,8 @@ def build_vod_json(session: Session, c: Config) -> dict:
             "api": ov.get("api", s.api),
         }
         ext = ov.get("ext", s.ext)
-        if ext is not None:
+        # 空串/空 dict 的 ext 对 FongMi 是脏数据（spider 初始化可能异常），直接省略
+        if ext not in (None, "", {}, []):
             item["ext"] = ext
         jar = ov.get("jar", s.jar)
         if jar:
