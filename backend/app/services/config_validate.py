@@ -28,8 +28,10 @@ def validate(doc: dict, enc_enabled: bool = False, enc_key: str = "") -> dict:
 
     # ---- 1. 站点 key 唯一 ----
     seen = {}
+    name_seen = {}
     for i, s in enumerate(_site_map(doc)):
         k = str(s.get("key") or "")
+        nm = str(s.get("name") or "")
         if not k:
             errors.append(f"sites[{i}] 缺少 key")
             continue
@@ -37,6 +39,10 @@ def validate(doc: dict, enc_enabled: bool = False, enc_key: str = "") -> dict:
             errors.append(f"站点 key 重复: {k}（第 {seen[k] + 1} 与第 {i + 1} 项）——TVBox 中后加载的会覆盖前者")
         else:
             seen[k] = i
+        if nm and nm in name_seen:
+            warnings.append(f"站点名称重复: {nm}（{name_seen[nm]} 与 {k}）——界面会显示两行同名难以区分")
+        elif nm:
+            name_seen[nm] = k
 
     # ---- 2/3. lives epg + catchup ----
     lives = doc.get("lives", [])
