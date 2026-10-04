@@ -29,6 +29,7 @@ async function load() {
       global_fields: JSON.stringify(cfg.value.global_fields || {}, null, 2),
       encrypt: !!cfg.value.encrypt, enc_key: '', enc_key_set: !!cfg.value.enc_key_set,
     }
+    loadStructured()
   } catch (e) { ElMessage.error(e.message) }
 }
 
@@ -252,6 +253,62 @@ async function recheckSites() {
   rechecking.value = false
 }
 
+// ---- 直播源（lives）/ 解析（parses）结构化编辑（FongMi 扩展字段，写入 global_fields）----
+const livesRows = ref([])
+const parsesRows = ref([])
+const PARSE_TYPES = [
+  { v: 0, label: '0 · 嗅探（WebView 拦截）' },
+  { v: 1, label: '1 · JSON 接口' },
+  { v: 2, label: '2 · JSON 扩展（送 JAR）' },
+  { v: 3, label: '3 · JSON 聚合（送 JAR）' },
+  { v: 4, label: '4 · 超级解析（并行尝试）' },
+]
+
+function loadStructured() {
+  const gf = cfg.value?.global_fields || {}
+  livesRows.value = Array.isArray(gf.lives) ? gf.lives.map(l => ({
+    name: l.name || '', url: l.url || '', epg: l.epg || '', ua: l.ua || '',
+  })) : []
+  parsesRows.value = Array.isArray(gf.parses) ? gf.parses.map(p => ({
+    name: p.name || '', type: Number(p.type ?? 1), url: p.url || '',
+    flag: Array.isArray(p?.ext?.flag) ? p.ext.flag.join(',') : '',
+    header: p?.ext?.header ? JSON.stringify(p.ext.header) : '',
+  })) : []
+}
+
+function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '' }) }
+function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
+
+function cleanObj(o) { // 去掉空值字段
+  const out = {}
+  for (const [k, v] of Object.entries(o)) if (v !== '' && v !== null && v !== undefined) out[k] = v
+  return out
+}
+
+// 结构化数据 → 写回 global_fields 文本框 → 走统一保存链路
+async function saveStructured() {
+  const lives = livesRows.value.filter(r => r.name && r.url).map(r => cleanObj({
+    name: r.name.trim(), url: r.url.trim(), epg: r.epg.trim() || undefined, ua: r.ua.trim() || undefined,
+  }))
+  const parses = []
+  for (const r of parsesRows.value.filter(r => r.name && r.url)) {
+    const p = { name: r.name.trim(), type: Number(r.type) || 0, url: r.url.trim() }
+    const ext = {}
+    if (r.flag.trim()) ext.flag = r.flag.split(/[,，]/).map(x => x.trim()).filter(Boolean)
+    if (r.header.trim()) {
+      try { ext.header = JSON.parse(r.header) } catch { ElMessage.error(`解析「${r.name}」的 header 不是合法 JSON，未保存`); return }
+    }
+    if (Object.keys(ext).length) p.ext = ext
+    parses.push(p)
+  }
+  let fields
+  try { fields = JSON.parse(editForm.value.global_fields || '{}') } catch { ElMessage.error('全局字段不是合法 JSON，请先修正后再保存结构化字段'); return }
+  if (lives.length) fields.lives = lives; else delete fields.lives
+  if (parses.length) fields.parses = parses; else delete fields.parses
+  editForm.value.global_fields = JSON.stringify(fields, null, 2)
+  await saveBase()
+}
+
 onMounted(load)
 </script>
 
@@ -290,6 +347,46 @@ onMounted(load)
           <el-button type="primary" :loading="saving" @click="saveBase">保存</el-button>
         </el-form-item>
       </el-form>
+    </el-card>
+
+    <el-card class="card-block" shadow="never">
+      <template #header>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
+          <span>直播源 / 解析（FongMi 扩展字段）</span>
+          <div style="flex:1"></div>
+          <el-button size="small" @click="addLive">+ 直播源</el-button>
+          <el-button size="small" @click="addParse">+ 解析</el-button>
+          <el-button size="small" type="primary" :loading="saving" @click="saveStructured">保存结构化字段</el-button>
+        </div>
+      </template>
+      <div class="st-tip">写入 <code>global_fields.lives / parses</code>，与全局字段文本框共享数据；发布时自动并入配置。</div>
+
+      <div class="st-sec">
+        <div class="st-title">直播源 lives（{{ livesRows.length }}）</div>
+        <div v-for="(l, i) in livesRows" :key="'l'+i" class="st-row">
+          <el-input v-model="l.name" placeholder="名称，如 CCTV" class="st-name" />
+          <el-input v-model="l.url" placeholder="直播列表 url（txt/m3u/json）" class="st-url" />
+          <el-input v-model="l.epg" placeholder="epg（可选）" class="st-epg" />
+          <el-input v-model="l.ua" placeholder="UA（可选）" class="st-ua" />
+          <el-button size="small" type="danger" text @click="livesRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-empty v-if="!livesRows.length" description="无直播源，点右上「+ 直播源」添加" :image-size="50" />
+      </div>
+
+      <div class="st-sec">
+        <div class="st-title">网页解析 parses（{{ parsesRows.length }}）</div>
+        <div v-for="(p, i) in parsesRows" :key="'p'+i" class="st-row">
+          <el-input v-model="p.name" placeholder="名称" class="st-name" />
+          <el-select v-model="p.type" class="st-type">
+            <el-option v-for="t in PARSE_TYPES" :key="t.v" :label="t.label" :value="t.v" />
+          </el-select>
+          <el-input v-model="p.url" placeholder="解析接口 url（?url= 结尾）" class="st-url" />
+          <el-input v-model="p.flag" placeholder="适用 flag 逗号分隔（可选）" class="st-epg" />
+          <el-input v-model="p.header" placeholder='header JSON（可选）' class="st-ua" />
+          <el-button size="small" type="danger" text @click="parsesRows.splice(i, 1)">删</el-button>
+        </div>
+        <el-empty v-if="!parsesRows.length" description="无解析规则，点右上「+ 解析」添加" :image-size="50" />
+      </div>
     </el-card>
 
     <el-card class="card-block" shadow="never">
@@ -436,6 +533,22 @@ onMounted(load)
 .sname { font-weight: 500; }
 .skey { color: #909399; font-size: 12px; }
 .share-tip { margin-top: 8px; color: #e6a23c; font-size: 12px; }
+/* 直播源/解析结构化编辑 */
+.st-tip { color: #909399; font-size: 12px; margin-bottom: 10px; }
+.st-tip code { background: #f5f7fa; padding: 1px 4px; border-radius: 3px; }
+.st-sec { margin-bottom: 14px; }
+.st-sec:last-child { margin-bottom: 0; }
+.st-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.st-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.st-row .st-name { width: 150px; }
+.st-row .st-url { flex: 1; min-width: 200px; }
+.st-row .st-epg { width: 160px; }
+.st-row .st-ua { width: 180px; }
+.st-row .st-type { width: 190px; }
+@media (max-width: 640px) {
+  .st-row .st-name, .st-row .st-url, .st-row .st-epg, .st-row .st-ua, .st-row .st-type { width: 100%; min-width: 0; flex: none; }
+  .st-row { gap: 4px; }
+}
 .ov-tip { color: #909399; font-size: 12px; margin-bottom: 8px; }
 .ov-tip code { background: #f5f7fa; padding: 1px 4px; border-radius: 3px; }
 .preview-json {
