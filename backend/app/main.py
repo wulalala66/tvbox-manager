@@ -1,5 +1,6 @@
 """应用入口：路由组装 + 管理端登录鉴权 + SPA 托管 + TVBox 静态源托管"""
 import mimetypes
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
@@ -8,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .config import SOURCES_DIR
+from .config import DATA_DIR, SOURCES_DIR
 from .database import init_db
 from .routers import configs, health, importer, lives, sites, sources
 from .security import (ADMIN_USER, _audit, _clear_login_failures,
@@ -377,7 +378,9 @@ app.include_router(lives.router)
 # ---- TVBox 静态源托管：配置里 ./py/x.py ./jar/x.jar 等相对路径必须能直接下载 ----
 # TVBox 解析相对路径 = 订阅地址目录 + 相对路径；/configs/{id}/ 前缀由下方专属路由兜底。
 # mount 必须在 SPA catch-all 之前，否则被 catch-all 吞掉返回 index.html。
-TVBOX_SRC = Path("/opt/spider/tvbox/tvbox源")
+# 额外静态源目录（本地已有的 tvbox 源文件），环境变量 TVBOX_SRC_DIR 可覆盖；
+# 不设置则仅托管 data/sources 下入库的源。目录不存在时自动跳过。
+TVBOX_SRC = Path(os.environ.get("TVBOX_SRC_DIR", str(DATA_DIR.parent / "extra-sources")))
 
 _STATIC_DIRS = {
     "py": [SOURCES_DIR / "py", TVBOX_SRC / "py"],

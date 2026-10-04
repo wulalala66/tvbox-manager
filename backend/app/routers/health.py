@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import re
 import time
 from pathlib import Path
@@ -137,7 +138,9 @@ def _resolve_jar_path(jar_ref):
     if not jar_ref:
         return None
     name = jar_ref.rstrip("/").split("/")[-1]
-    for base in (Path("/opt/spider/tvbox/tvbox源/jar"), SOURCES_DIR / "jar"):
+    extra_jar = os.environ.get("TVBOX_JAR_DIRS", "")  # 冒号分隔的额外 jar 目录
+    bases = [SOURCES_DIR / "jar"] + [Path(x) for x in extra_jar.split(":") if x.strip()]
+    for base in bases:
         cand = base / name
         if cand.is_file():
             return cand
