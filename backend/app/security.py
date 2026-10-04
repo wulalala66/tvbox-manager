@@ -10,10 +10,23 @@ from .config import DATA_DIR
 
 # ---- 管理员凭据 ----
 ADMIN_USER = "admin"
-# C1：密码不再硬编码。首启从 TVBOX_ADMIN_PASSWORD 环境变量读取（缺省为用户指定的初始密码），
-# PBKDF2 哈希落盘 admin.creds 后源码中的明文即不再参与任何校验，可用 /login 改密覆盖。
+# 初始密码从 TVBOX_ADMIN_PASSWORD 环境变量读取；未设置时首次启动生成随机密码
+# 并打印到控制台（仅一次）。PBKDF2 哈希落盘 admin.creds 后环境变量不再参与校验，
+# 可用 /change-password 覆盖。仓库中不保留任何明文密码。
 import os as _os
-ADMIN_PASSWORD = _os.environ.get("TVBOX_ADMIN_PASSWORD", <REDACTED>)
+import sys as _sys
+
+
+def _initial_password() -> str:
+    env_pw = _os.environ.get("TVBOX_ADMIN_PASSWORD", "").strip()
+    if env_pw:
+        return env_pw
+    pw = secrets.token_urlsafe(12)
+    print(f"[tvbox-manager] 首次启动初始管理员密码: {pw}（请立即登录并修改）", file=_sys.stderr, flush=True)
+    return pw
+
+
+ADMIN_PASSWORD = _initial_password()
 
 # 密码存储：PBKDF2-SHA256（首次启动生成盐并落盘，之后校验走哈希）
 _CREDS_FILE = DATA_DIR / "admin.creds"

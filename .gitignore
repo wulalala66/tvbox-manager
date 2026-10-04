@@ -16,3 +16,4 @@ data/
 # 编辑器
 .idea/
 .vscode/
+*.pyc
