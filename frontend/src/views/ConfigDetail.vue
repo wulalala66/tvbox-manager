@@ -284,7 +284,8 @@ onMounted(load)
       <div class="site-list">
         <div v-for="(s, i) in cfg.sites" :key="s.id" class="site-row">
           <span class="idx">{{ i + 1 }}</span>
-          <span class="sname">{{ s.name }}</span>
+          <span class="sname" @click="$router.push({ path: '/sites', query: { q: s.name } })"
+                style="cursor:pointer" title="到站点页查看/测活">{{ s.name }}</span>
           <el-tag size="small" type="info">{{ typeLabel[s.site_type] || s.site_type }}</el-tag>
           <span class="skey">{{ s.key }}</span>
           <div style="flex:1"></div>

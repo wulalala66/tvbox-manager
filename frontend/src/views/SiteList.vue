@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listSites, createSite, updateSite, deleteSite, checkSite, checkAllSites,
@@ -351,7 +352,12 @@ async function batchTag() {
   } catch (e) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
 }
 
-onMounted(() => { load(); loadHealth() })
+onMounted(() => {
+  // 支持从方案页站点名跳转过来：/sites?q=名称
+  const rq = useRoute().query.q
+  if (rq) q.value = String(rq)
+  load(); loadHealth()
+})
 </script>
 
 <template>
