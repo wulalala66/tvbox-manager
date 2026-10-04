@@ -28,7 +28,7 @@ def to_out(session: Session, c: Config) -> dict:
                 "id": s.id, "key": s.key, "name": s.name, "site_type": s.site_type,
                 "enabled": s.enabled, "order_num": cs.order_num, "overrides": cs.overrides,
                 # 测活摘要：ok / fail / untested（供方案页直接显示健康徽标）
-                "health": ("ok" if s.last_test_result.get("ok")
+                "health": ("ok" if (s.last_test_result or {}).get("ok")
                            else "fail" if s.last_test_result else "untested"),
                 "health_msg": (s.last_test_result or {}).get("message", "")[:80],
             })
@@ -541,6 +541,15 @@ def diagnose_config(config_id: int, session: Session = Depends(get_session)):
     c = _get(session, config_id)
     from ..services.diagnose import diagnose
     return diagnose(session, c)
+
+
+@router.get("/{config_id}/validate")
+def validate_config(config_id: int, session: Session = Depends(get_session)):
+    """发布前校验：FongMi 语义层检查（key 唯一/epg 占位/catchup/type4 base64/style/parses type/danmaku/加密一致性）"""
+    c = _get(session, config_id)
+    doc = build_vod_json(session, c)
+    from ..services.config_validate import validate
+    return validate(doc, enc_enabled=bool(c.encrypt), enc_key=c.enc_key or "")
 
 
 @router.post("/{config_id}/live-preview")

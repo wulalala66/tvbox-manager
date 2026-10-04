@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, publishVerify, publishHistory, publishRollback, publishDiff, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
+  listSites, publishConfig, publishVerify, publishHistory, publishRollback, publishDiff, validateConfig, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
   checkAllSites as checkSites, listSources,
 } from '../api'
 
@@ -144,6 +144,28 @@ async function saveBase() {
 }
 
 async function publish() {
+  // 发布前校验：error 级问题直接拦截发布
+  try {
+    const v = await validateConfig(id)
+    if (v.errors && v.errors.length) {
+      ElMessageBox.alert(
+        v.errors.map(e => `• ${e}`).join('\n') + (v.warnings.length ? `\n\n另有提示 ${v.warnings.length} 条（不阻塞发布）：\n${v.warnings.map(w => `• ${w}`).join('\n')}` : ''),
+        `校验未通过：${v.errors.length} 个错误`,
+        { type: 'error', customStyle: { whiteSpace: 'pre-line' }, confirmButtonText: '返回修改' }
+      ).catch(() => {})
+      return
+    }
+    if (v.warnings && v.warnings.length) {
+      await ElMessageBox.confirm(
+        v.warnings.map(w => `• ${w}`).join('\n'),
+        `校验通过，但有 ${v.warnings.length} 条提示`,
+        { type: 'warning', customStyle: { whiteSpace: 'pre-line' }, confirmButtonText: '仍然发布', cancelButtonText: '取消' }
+      ).catch(() => { throw Object.assign(new Error('已取消发布'), { silent: true }) })
+    }
+  } catch (e) {
+    if (!e.silent) ElMessage.error('校验请求失败: ' + e.message)
+    return
+  }
   try {
     const r = await publishConfig(id)
     shareInfo.value = r
