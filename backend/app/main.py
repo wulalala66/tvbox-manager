@@ -152,13 +152,15 @@ def audit_logs_export():
 
 # ---- 数据备份：整包导出 DB + 源文件 + 配置（需登录；中间件已保护）----
 @app.get("/backup")
-def backup_download():
+def backup_download(request: Request):
     """打包 data/ 全量（SQLite + 源文件 + 配置 + 历史/日志）为 zip 供下载。"""
     import io
     import zipfile
     import datetime as _dt
     from fastapi import Response
     from .config import DATA_DIR
+
+    _audit(request, "backup_download")
 
     buf = io.BytesIO()
     stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
