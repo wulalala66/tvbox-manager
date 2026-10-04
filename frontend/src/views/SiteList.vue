@@ -327,16 +327,20 @@ async function batchToggle(enabled) {
 
 const configs = ref([])
 listConfigs().then(d => { configs.value = d }).catch(() => {})
-async function batchAddToConfig() {
+const addCfgDialog = ref(false)
+const addCfgId = ref(null)
+function openBatchAddToConfig() {
   if (!selected.value.length) return ElMessage.warning('先勾选站点')
+  addCfgId.value = null
+  addCfgDialog.value = true
+}
+async function doBatchAddToConfig() {
+  if (!addCfgId.value) return ElMessage.warning('请选择方案')
   try {
-    const { value } = await ElMessageBox.prompt(
-      `把选中的 ${selected.value.length} 个站点加入方案（输入方案 ID）：\n` +
-      configs.value.map(c => `${c.id}. ${c.name}`).join('\n'),
-      '批量加入方案', { inputPattern: /\d+/, inputErrorMessage: '请输入方案 ID' })
-    const d = await batchAddConfigSites(Number(value), selected.value)
-    ElMessage.success(`已加入 ${d.added.length} 个${d.skipped.length ? '，跳过 ' + d.skipped.length + ' 个（已在方案中）' : ''}`)
-  } catch (e) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+    const d = await batchAddConfigSites(Number(addCfgId.value), selected.value)
+    addCfgDialog.value = false
+    ElMessage.success(`已加入「${(configs.value.find(c => c.id === Number(addCfgId.value)) || {}).name || addCfgId.value}」：新增 ${d.added.length} 个${d.skipped.length ? '，跳过 ' + d.skipped.length + ' 个（已在方案中）' : ''}`)
+  } catch (e) { ElMessage.error(e.message) }
 }
 
 async function batchTag() {
@@ -438,7 +442,7 @@ onMounted(() => {
       <div v-if="selected.length" class="batch-bar">
         已选 {{ selected.length }} 个：
         <el-button size="small" type="danger" plain @click="batchDelete">删除</el-button>
-        <el-button size="small" type="primary" plain @click="batchAddToConfig">加入方案…</el-button>
+        <el-button size="small" type="primary" plain @click="openBatchAddToConfig">加入方案…</el-button>
         <el-button size="small" text @click="selected = []">取消</el-button>
       </div>
       <el-card v-for="s in pagedSites" :key="s.id" class="m-card" shadow="never" :class="{ 'm-sel': selected.includes(s.id) }">
@@ -469,7 +473,7 @@ onMounted(() => {
       <el-button size="small" @click="batchToggle(true)">批量启用</el-button>
       <el-button size="small" @click="batchTag">设置标签…</el-button>
       <el-button size="small" @click="batchToggle(false)">批量停用</el-button>
-      <el-button size="small" type="primary" plain @click="batchAddToConfig">加入方案…</el-button>
+      <el-button size="small" type="primary" plain @click="openBatchAddToConfig">加入方案…</el-button>
       <el-button size="small" text @click="tableRef?.clearSelection?.(); selected = []">取消选择</el-button>
     </div>
 
@@ -583,6 +587,17 @@ onMounted(() => {
       <template #footer>
         <el-button @click="dialog = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="addCfgDialog" title="批量加入方案" width="min(380px, 94vw)" align-center>
+      <div style="margin-bottom:10px;color:#909399;font-size:13px">将选中的 {{ selected.length }} 个站点加入：</div>
+      <el-select v-model="addCfgId" placeholder="选择方案" style="width:100%" filterable>
+        <el-option v-for="c in configs" :key="c.id" :label="`${c.id}. ${c.name}`" :value="c.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="addCfgDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!addCfgId" @click="doBatchAddToConfig">加入</el-button>
       </template>
     </el-dialog>
   </div>
