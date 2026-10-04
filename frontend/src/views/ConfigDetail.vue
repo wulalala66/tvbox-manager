@@ -195,6 +195,17 @@ async function copyShare() {
   catch { ElMessage.warning(url) }
 }
 
+const qrDialog = ref(false)
+const qrDataUrl = ref('')
+async function showShareQr() {
+  const url = `${origin}/configs/${id}/download?token=${(shareInfo.value || cfg.value).share_token}`
+  try {
+    const QRCode = (await import('qrcode')).default
+    qrDataUrl.value = await QRCode.toDataURL(url, { width: 240, margin: 2 })
+    qrDialog.value = true
+  } catch (e) { ElMessage.error('二维码生成失败: ' + e.message) }
+}
+
 onMounted(load)
 </script>
 
@@ -273,6 +284,7 @@ onMounted(load)
         <div>订阅地址（填入 TVBox 配置地址）：</div>
         <code class="share-url">{{ origin }}/configs/{{ id }}/download?token={{ (shareInfo || cfg).share_token }}</code>
         <el-button size="small" @click="copyShare">复制</el-button>
+        <el-button size="small" @click="showShareQr">二维码</el-button>
       </div>
       <div class="share-tip" v-if="(shareInfo || cfg).encrypted">
         内容已 2423 AES 加密：只有 TVBox/FongMi 输入正确配置才能解析，浏览器直接打开只会看到乱码。
@@ -293,6 +305,12 @@ onMounted(load)
         <el-button @click="ovDialog = false">取消</el-button>
         <el-button type="primary" :loading="ovSaving" @click="saveOverrides">保存</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="qrDialog" title="订阅二维码" width="300px" align-center>
+      <div style="text-align: center">
+        <img v-if="qrDataUrl" :src="qrDataUrl" alt="订阅二维码" style="width: 240px; height: 240px" />
+      </div>
     </el-dialog>
 
     <el-card v-if="preview" class="card-block" shadow="never">
