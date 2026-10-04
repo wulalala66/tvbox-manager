@@ -458,6 +458,61 @@ def publish_history(config_id: int, session: Session = Depends(get_session)):
     return {"ok": True, "items": items}
 
 
+@router.get("/{config_id}/publish-diff")
+def publish_diff(config_id: int, file: str = "", session: Session = Depends(get_session)):
+    """回滚前预览：历史快照 vs 当前产物的结构化差异（解密后逐项对比）
+    返回 sites 增/删/改（key 级）、顶层字段增删改、spider 变化。"""
+    c = _get(session, config_id)
+    if not file or "/" in file or "\\" in file or not file.endswith(".json"):
+        raise HTTPException(400, "非法文件名")
+    src = (CONFIGS_DIR / "history" / c.slug / file).resolve()
+    if not str(src).startswith(str((CONFIGS_DIR / "history").resolve()) + "/") or not src.exists():
+        raise HTTPException(404, "快照不存在")
+    pub = CONFIGS_DIR / "published" / f"{c.slug}.json"
+    if not pub.exists():
+        raise HTTPException(404, "当前方案尚未发布")
+    from ..services.crypto import fongmi_decode
+
+    def _load(p):
+        raw = p.read_text(encoding="utf-8")
+        if raw.startswith("2423"):
+            if not c.enc_key:
+                raise HTTPException(400, "密文快照缺少 enc_key，无法解密对比")
+            raw = fongmi_decode(raw)
+        try:
+            return json.loads(raw)
+        except Exception as e:
+            raise HTTPException(400, f"JSON 解析失败: {e}")
+
+    old = _load(src)
+    cur = _load(pub)
+
+    def _site_map(doc):
+        return {s.get("key", f"#{i}"): s for i, s in enumerate(doc.get("sites", []) if isinstance(doc.get("sites"), list) else [])}
+
+    om, cm = _site_map(old), _site_map(cur)
+    added = sorted(set(cm) - set(om))
+    removed = sorted(set(om) - set(cm))
+    changed = []
+    for k in sorted(set(om) & set(cm)):
+        if om[k] != cm[k]:
+            diff_keys = sorted(set(list(om[k].keys()) + list(cm[k].keys())) - {k2 for k2 in om[k] if k2 in cm[k] and om[k][k2] == cm[k][k2]})
+            changed.append({"key": k, "name": cm[k].get("name") or om[k].get("name", ""), "fields": diff_keys[:8]})
+    old_keys = {k for k in old.keys() if k != "sites"}
+    cur_keys = {k for k in cur.keys() if k != "sites"}
+    return {
+        "ok": True,
+        "file": file,
+        "sites": {"added": [{"key": k, "name": cm[k].get("name", "")} for k in added],
+                  "removed": [{"key": k, "name": om[k].get("name", "")} for k in removed],
+                  "changed": changed,
+                  "old_count": len(om), "cur_count": len(cm)},
+        "top": {"added": sorted(cur_keys - old_keys), "removed": sorted(old_keys - cur_keys),
+                "same": sorted(k for k in old_keys & cur_keys if old[k] == cur[k]),
+                "changed": sorted(k for k in old_keys & cur_keys if old[k] != cur[k])},
+    }
+
+
 @router.post("/{config_id}/publish-rollback")
 def publish_rollback(config_id: int, body: dict, session: Session = Depends(get_session)):
     """回滚到指定历史快照：把 history/{slug}/{file} 复制回 published/{slug}.json。

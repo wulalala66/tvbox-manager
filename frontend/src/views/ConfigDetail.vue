@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, publishVerify, publishHistory, publishRollback, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
+  listSites, publishConfig, publishVerify, publishHistory, publishRollback, publishDiff, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
   checkAllSites as checkSites, listSources,
 } from '../api'
 
@@ -347,14 +347,23 @@ async function doLivePreview(l) {
   } catch (e) { lpError.value = e.message } finally { lpLoading.value = false }
 }
 
-// ---- 发布历史 + 回滚 ----
+// ---- 发布历史 + 回滚 + diff ----
 const histVisible = ref(false)
 const histLoading = ref(false)
 const histItems = ref([])
+const diffVisible = ref(false)
+const diffLoading = ref(false)
+const diffData = ref(null)
+const diffFile = ref('')
 async function showHistory() {
   histVisible.value = true; histLoading.value = true
   try { histItems.value = (await publishHistory(id)).items }
   catch (e) { ElMessage.error(e.message) } finally { histLoading.value = false }
+}
+async function showDiff(file) {
+  diffVisible.value = true; diffLoading.value = true; diffFile.value = file
+  try { diffData.value = await publishDiff(id, file) }
+  catch (e) { ElMessage.error(e.message) } finally { diffLoading.value = false }
 }
 async function doRollback(file) {
   try {
@@ -664,8 +673,9 @@ onMounted(() => { load(); loadJars() })
             <template #default="{ row }">{{ row.sites ?? '—' }}</template>
           </el-table-column>
           <el-table-column prop="bytes" label="字节" width="80" />
-          <el-table-column label="操作" width="110">
+          <el-table-column label="操作" width="170">
             <template #default="{ row }">
+              <el-button size="small" type="info" plain @click="showDiff(row.file)">对比</el-button>
               <el-button size="small" type="warning" plain @click="doRollback(row.file)">回滚到此</el-button>
             </template>
           </el-table-column>
@@ -674,6 +684,37 @@ onMounted(() => { load(); loadJars() })
           暂无历史快照——发布第二次起，每次发布都会把旧产物自动存档。
         </div>
         </div>
+      </el-dialog>
+
+      <el-dialog v-model="diffVisible" :title="`快照对比 · ${diffFile}`" :width="isMobile ? '96%' : '640px'">
+        <template v-if="diffLoading"><el-skeleton :rows="4" animated /></template>
+        <template v-else-if="diffData">
+          <div class="diff-sum">
+            站点数 {{ diffData.sites.old_count }} → {{ diffData.sites.cur_count }} ·
+            新增 {{ diffData.sites.added.length }} · 移除 {{ diffData.sites.removed.length }} · 变更 {{ diffData.sites.changed.length }}
+          </div>
+          <div class="diff-sec" v-if="diffData.sites.added.length">
+            <div class="diff-title">新增站点</div>
+            <div v-for="s in diffData.sites.added" :key="s.key" class="diff-item add">+ {{ s.key }}{{ s.name ? `（${s.name}）` : '' }}</div>
+          </div>
+          <div class="diff-sec" v-if="diffData.sites.removed.length">
+            <div class="diff-title">移除站点</div>
+            <div v-for="s in diffData.sites.removed" :key="s.key" class="diff-item del">- {{ s.key }}{{ s.name ? `（${s.name}）` : '' }}</div>
+          </div>
+          <div class="diff-sec" v-if="diffData.sites.changed.length">
+            <div class="diff-title">字段变更</div>
+            <div v-for="s in diffData.sites.changed" :key="s.key" class="diff-item chg">~ {{ s.key }}{{ s.name ? `（${s.name}）` : '' }}: {{ s.fields.join(', ') }}</div>
+          </div>
+          <div class="diff-sec" v-if="diffData.top.added.length || diffData.top.removed.length || diffData.top.changed.length">
+            <div class="diff-title">顶层字段</div>
+            <div v-for="k in diffData.top.added" :key="'ta' + k" class="diff-item add">+ {{ k }}</div>
+            <div v-for="k in diffData.top.removed" :key="'tr' + k" class="diff-item del">- {{ k }}</div>
+            <div v-for="k in diffData.top.changed" :key="'tc' + k" class="diff-item chg">~ {{ k }}</div>
+          </div>
+          <div v-if="!diffData.sites.added.length && !diffData.sites.removed.length && !diffData.sites.changed.length
+            && !diffData.top.added.length && !diffData.top.removed.length && !diffData.top.changed.length"
+            style="color:#909399;font-size:13px">无差异——快照与当前产物完全一致。</div>
+        </template>
       </el-dialog>
 
       <el-dialog v-model="lpVisible" title="直播源预览" width="560px">
@@ -857,6 +898,13 @@ onMounted(() => { load(); loadJars() })
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
 .hist-wrap { overflow-x: auto; }
+.diff-sum { font-size: 13px; color: #606266; margin-bottom: 10px; }
+.diff-sec { margin-bottom: 10px; }
+.diff-title { font-size: 13px; font-weight: 600; color: #303133; margin: 6px 0 4px; }
+.diff-item { font-size: 12px; font-family: monospace; padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+.diff-item.add { color: #67c23a; background: #f0f9eb; }
+.diff-item.del { color: #f56c6c; background: #fef0f0; }
+.diff-item.chg { color: #e6a23c; background: #fdf6ec; }
 .dg-list { margin-top: 10px; max-height: 420px; overflow-y: auto; }
 .dg-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
 .dg-item { font-weight: 600; min-width: 110px; }
