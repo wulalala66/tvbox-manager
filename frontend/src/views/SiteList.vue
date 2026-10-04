@@ -95,9 +95,10 @@ function openEdit(s) {
 async function save() {
   if (!form.key || !form.name) return ElMessage.warning('key 和名称必填')
   // 类型↔api 联动校验（防呆：保存前拦下最常见的填错组合）
+  // type=3 合法形态：csp_ 类名 / ./py|./js 相对路径源文件 / http 远程 spider 接口
   const apiTrim = (form.api || '').trim()
-  if (form.site_type === 3 && !apiTrim.startsWith('csp_'))
-    return ElMessage.error('Spider 类型（3）的 api 必须以 csp_ 开头（如 csp_Xyz）')
+  if (form.site_type === 3 && !apiTrim.startsWith('csp_') && !apiTrim.startsWith('./py/') && !apiTrim.startsWith('./js/') && !/^https?:\/\//.test(apiTrim))
+    return ElMessage.error('Spider 类型（3）的 api 应为 csp_Xyz、./py/xx.py、./js/xx.js 或 http(s):// 地址')
   if ((form.site_type === 0 || form.site_type === 1) && !/^https?:\/\//.test(apiTrim))
     return ElMessage.error('XML/JSON 类型（0/1）的 api 必须是 http(s):// 接口地址')
   saving.value = true

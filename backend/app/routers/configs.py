@@ -480,6 +480,14 @@ def publish_rollback(config_id: int, body: dict, session: Session = Depends(get_
     return {"ok": True, "file": fname, "bytes": dst.stat().st_size}
 
 
+@router.get("/{config_id}/diagnose")
+def diagnose_config(config_id: int, session: Session = Depends(get_session)):
+    """配置诊断：spider 可达性 / 站点 api 格式与源文件 / lives/parses 完整性 / 密钥状态全检查"""
+    c = _get(session, config_id)
+    from ..services.diagnose import diagnose
+    return diagnose(session, c)
+
+
 @router.post("/{config_id}/live-preview")
 def live_preview(config_id: int, body: dict, session: Session = Depends(get_session)):
     _get(session, config_id)

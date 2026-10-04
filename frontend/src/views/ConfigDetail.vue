@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConfig, updateConfig, setConfigSites, addConfigSite, removeConfigSite,
-  listSites, publishConfig, publishVerify, publishHistory, publishRollback, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
+  listSites, publishConfig, publishVerify, publishHistory, publishRollback, diagnoseConfig, previewConfig, batchAddConfigSites, previewConfigStats, previewLive,
   checkAllSites as checkSites,
 } from '../api'
 
@@ -322,6 +322,18 @@ async function doRollback(file) {
   await load()
 }
 
+// ---- 配置诊断 ----
+const dgVisible = ref(false)
+const dgLoading = ref(false)
+const dgResult = ref(null)
+async function doDiagnose() {
+  dgVisible.value = true; dgLoading.value = true; dgResult.value = null
+  try { dgResult.value = await diagnoseConfig(id) }
+  catch (e) { ElMessage.error(e.message) } finally { dgLoading.value = false }
+}
+const DG_TAG = { error: 'danger', warn: 'warning', info: 'info', ok: 'success' }
+const DG_LABEL = { error: '错误', warn: '警告', info: '提示', ok: '正常' }
+
 function cleanObj(o) { // 去掉空值字段
   const out = {}
   for (const [k, v] of Object.entries(o)) if (v !== '' && v !== null && v !== undefined) out[k] = v
@@ -365,6 +377,7 @@ onMounted(load)
       <el-button type="primary" @click="publish">发布</el-button>
       <el-button @click="doVerify" :loading="verifyLoading" v-if="cfg.published_at">解密自检</el-button>
       <el-button @click="showHistory" v-if="cfg.published_at">发布历史</el-button>
+      <el-button @click="doDiagnose" :loading="dgLoading">诊断</el-button>
       <el-button @click="doPreview">预览 JSON</el-button>
       <el-button @click="exportJson">导出 JSON</el-button>
       <el-button @click="showStats">统计</el-button>
@@ -435,6 +448,26 @@ onMounted(load)
         </div>
         <el-empty v-if="!parsesRows.length" description="无解析规则，点右上「+ 解析」添加" :image-size="50" />
       </div>
+
+      <el-dialog v-model="dgVisible" title="配置诊断" width="640px">
+        <template v-if="dgLoading"><el-skeleton :rows="5" animated /></template>
+        <template v-else-if="dgResult">
+          <el-alert v-if="!dgResult.issues.length" type="success" :closable="false"
+            :title="`未发现错误 · 提示 ${dgResult.warnings.length} 条 · 站点 ${dgResult.counts.sites} 个`" />
+          <el-alert v-else type="error" :closable="false"
+            :title="`发现 ${dgResult.counts.errors} 个错误 · 警告 ${dgResult.counts.warnings} 条 · 站点 ${dgResult.counts.sites} 个`" />
+          <div class="dg-list">
+            <div v-for="(it, i) in dgResult.issues" :key="'e' + i" class="dg-row">
+              <el-tag :type="DG_TAG[it.level]" size="small">{{ DG_LABEL[it.level] }}</el-tag>
+              <span class="dg-item">{{ it.item }}</span><span class="dg-msg">{{ it.msg }}</span>
+            </div>
+            <div v-for="(it, i) in dgResult.warnings" :key="'w' + i" class="dg-row">
+              <el-tag :type="DG_TAG[it.level]" size="small">{{ DG_LABEL[it.level] }}</el-tag>
+              <span class="dg-item">{{ it.item }}</span><span class="dg-msg">{{ it.msg }}</span>
+            </div>
+          </div>
+        </template>
+      </el-dialog>
 
       <el-dialog v-model="histVisible" :title="`发布历史（最近 10 份快照）`" :width="isMobile ? '96%' : '620px'">
         <div class="hist-wrap">
@@ -639,6 +672,10 @@ onMounted(load)
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
 .hist-wrap { overflow-x: auto; }
+.dg-list { margin-top: 10px; max-height: 420px; overflow-y: auto; }
+.dg-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.dg-item { font-weight: 600; min-width: 110px; }
+.dg-msg { color: #606266; word-break: break-all; }
 @media (max-width: 640px) {
   .st-row .st-name, .st-row .st-url, .st-row .st-epg, .st-row .st-ua, .st-row .st-type { width: 100%; min-width: 0; flex: none; }
   .st-row { gap: 4px; }
