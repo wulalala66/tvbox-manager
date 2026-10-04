@@ -55,6 +55,24 @@ function openCreate() {
   dialog.value = true
 }
 
+// 克隆：复用整份表单（key 加 -copy 后缀待改），仅 key 需要改
+function cloneSite(s) {
+  editing.value = null
+  const extRaw = typeof s.ext === 'string' ? s.ext : JSON.stringify(s.ext ?? '')
+  let extShown = extRaw
+  if (extRaw && /^[{[]/.test(extRaw.trim())) {
+    try { extShown = JSON.stringify(JSON.parse(extRaw), null, 2) } catch { /* 保持原样 */ }
+  }
+  Object.assign(form, {
+    key: s.key + '_copy', name: s.name + ' 副本', site_type: s.site_type, api: s.api || '',
+    ext: extShown, jar: s.jar || '',
+    searchable: s.extra?.searchable !== false, changeable: s.extra?.changeable !== false,
+    hide: s.extra?.hide || 0, timeout: s.extra?.timeout || null,
+  })
+  dialog.value = true
+  ElMessage.info('已载入站点副本，请修改 key 后保存')
+}
+
 function openEdit(s) {
   editing.value = s
   const extRaw = typeof s.ext === 'string' ? s.ext : JSON.stringify(s.ext ?? '')
@@ -414,6 +432,7 @@ onMounted(() => { load(); loadHealth() })
         <div class="m-actions">
           <el-button size="small" :loading="checking.has(s.id)" @click="doCheck(s)">测活</el-button>
           <el-button size="small" @click="openEdit(s)">编辑</el-button>
+          <el-button size="small" @click="cloneSite(s)">克隆</el-button>
           <el-button size="small" type="danger" plain @click="remove(s)">删除</el-button>
         </div>
       </el-card>
@@ -464,6 +483,7 @@ onMounted(() => { load(); loadHealth() })
         <template #default="{ row }">
           <el-button size="small" :loading="checking.has(row.id)" @click="doCheck(row)">测活</el-button>
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
+          <el-button size="small" @click="cloneSite(row)">克隆</el-button>
           <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
