@@ -286,6 +286,8 @@ function loadStructured() {
   const gf = cfg.value?.global_fields || {}
   livesRows.value = Array.isArray(gf.lives) ? gf.lives.map(l => ({
     name: l.name || '', url: l.url || '', epg: l.epg || '', ua: l.ua || '',
+    timeZone: l.timeZone || '', boot: !!l.boot,
+    catchup_type: l.catchup?.type || '', catchup_source: l.catchup?.source || '', catchup_regex: l.catchup?.regex || '',
   })) : []
   parsesRows.value = Array.isArray(gf.parses) ? gf.parses.map(p => ({
     name: p.name || '', type: Number(p.type ?? 1), url: p.url || '',
@@ -301,7 +303,7 @@ function loadStructured() {
   danmakuUrl.value = typeof gf.danmaku === 'string' ? gf.danmaku : ''
 }
 
-function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '' }) }
+function addLive() { livesRows.value.push({ name: '', url: '', epg: '', ua: '', timeZone: '', boot: false, catchup_type: '', catchup_source: '', catchup_regex: '' }) }
 function addParse() { parsesRows.value.push({ name: '', type: 1, url: '', flag: '', header: '' }) }
 function addAd() { adsRows.value.push({ v: '' }) }
 function addRule(t) { rulesRows.value.push(t ? { ...t } : { name: '', hosts: '', regex: '', exclude: '', script: '' }) }
@@ -362,6 +364,10 @@ function cleanObj(o) { // 去掉空值字段
 async function saveStructured() {
   const lives = livesRows.value.filter(r => r.name && r.url).map(r => cleanObj({
     name: r.name.trim(), url: r.url.trim(), epg: r.epg.trim() || undefined, ua: r.ua.trim() || undefined,
+    timeZone: r.timeZone.trim() || undefined, boot: r.boot || undefined,
+    catchup: (r.catchup_source.trim() || r.catchup_type) ? cleanObj({
+      type: r.catchup_type.trim() || undefined, source: r.catchup_source.trim() || undefined, regex: r.catchup_regex.trim() || undefined,
+    }) : undefined,
   }))
   const parses = []
   for (const r of parsesRows.value.filter(r => r.name && r.url)) {
@@ -455,13 +461,28 @@ onMounted(load)
 
       <div class="st-sec">
         <div class="st-title">直播源 lives（{{ livesRows.length }}）</div>
-        <div v-for="(l, i) in livesRows" :key="'l'+i" class="st-row">
-          <el-input v-model="l.name" placeholder="名称，如 CCTV" class="st-name" />
-          <el-input v-model="l.url" placeholder="直播列表 url（txt/m3u/json）" class="st-url" />
-          <el-input v-model="l.epg" placeholder="epg（可选）" class="st-epg" />
-          <el-input v-model="l.ua" placeholder="UA（可选）" class="st-ua" />
-          <el-button size="small" type="danger" text @click="livesRows.splice(i, 1)">删</el-button>
-          <el-button size="small" text type="primary" :loading="l._loading" @click="doLivePreview(l)">预览</el-button>
+        <div class="st-tip" style="margin-bottom:6px">epg 支持逗号分隔多源与 {id}/{name}/{epg} 变量（含 xml/gz 的条目按 XMLTV 处理）；勾选 boot 启动自动选中。</div>
+        <div v-for="(l, i) in livesRows" :key="'l'+i" class="live-block">
+          <div class="st-row" style="margin-bottom:4px">
+            <el-input v-model="l.name" placeholder="名称，如 CCTV" class="st-name" />
+            <el-input v-model="l.url" placeholder="直播列表 url（txt/m3u/json）" class="st-url" />
+            <el-checkbox v-model="l.boot" label="启动选中" />
+            <el-button size="small" type="danger" text @click="livesRows.splice(i, 1)">删</el-button>
+            <el-button size="small" text type="primary" :loading="l._loading" @click="doLivePreview(l)">预览</el-button>
+          </div>
+          <div class="st-row" style="margin-bottom:4px">
+            <el-input v-model="l.epg" placeholder="epg 多源逗号分隔，支持 {id}/{name}/{epg} 变量（可选）" class="st-epg" />
+            <el-input v-model="l.timeZone" placeholder="时区，如 Asia/Shanghai（可选）" class="st-epg" />
+            <el-input v-model="l.ua" placeholder="UA（可选）" class="st-ua" />
+          </div>
+          <div class="st-row">
+            <el-select v-model="l.catchup_type" placeholder="追看类型（可选）" clearable class="st-epg">
+              <el-option label="append（默认：拼接回看参数）" value="append" />
+              <el-option label="default（整串替换 url）" value="default" />
+            </el-select>
+            <el-input v-model="l.catchup_source" placeholder="回看 url 模板，如 ?playseek=${(b)yyyyMMddHHmmss}-${(e)yyyyMMddHHmmss}（可选）" class="st-url" />
+            <el-input v-model="l.catchup_regex" placeholder="回看生效条件 regex（可选）" class="st-epg" />
+          </div>
         </div>
         <el-empty v-if="!livesRows.length" description="无直播源，点右上「+ 直播源」添加" :image-size="50" />
       </div>
@@ -739,6 +760,7 @@ onMounted(load)
 .st-row .st-ua { width: 180px; }
 .st-row .st-type { width: 190px; }
 .rule-row { border: 1px dashed #dcdfe6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.live-block { border: 1px dashed #dcdfe6; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
 .lp-sample { margin-top: 10px; }
 .lp-g { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lp-ch { color: #606266; font-size: 12px; padding-left: 12px; line-height: 1.7; }
