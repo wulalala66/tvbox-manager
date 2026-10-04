@@ -128,9 +128,18 @@ async function save() {
 
 // 测活状态筛选（纯前端过滤当前页数据）
 const healthFilter = ref('all')
+// 标签筛选（多选，取并集：命中任一标签即显示）
+const tagFilter = ref([])
+const allTags = computed(() => {
+  const t = new Set()
+  for (const s of sites.value) for (const tag of (s.tags || [])) t.add(tag)
+  return [...t].sort()
+})
 const filteredSites = computed(() => {
-  if (healthFilter.value === 'all') return sites.value
-  return sites.value.filter(s => {
+  let list = sites.value
+  if (tagFilter.value.length) list = list.filter(s => (s.tags || []).some(t => tagFilter.value.includes(t)))
+  if (healthFilter.value === 'all') return list
+  return list.filter(s => {
     const r = s.last_test_result
     if (healthFilter.value === 'untested') return !r
     if (healthFilter.value === 'ok') return r && r.ok
@@ -344,6 +353,10 @@ onMounted(() => { load(); loadHealth() })
     <div class="toolbar">
       <el-input v-model="q" placeholder="搜索 key / 名称" clearable style="width: 220px" @input="onSearchInput" @keyup.enter="load" @clear="load" />
       <el-button @click="load">搜索</el-button>
+      <el-select v-model="tagFilter" multiple collapse-tags collapse-tags-tooltip placeholder="按标签筛选" clearable
+                 style="width: 200px" size="default">
+        <el-option v-for="t in allTags" :key="t" :label="t" :value="t" />
+      </el-select>
       <div style="flex:1"></div>
       <el-button :loading="checkingAll" @click="doCheckAll()">批量测活</el-button>
       <el-dropdown @command="c => doCheckAll(c)">
