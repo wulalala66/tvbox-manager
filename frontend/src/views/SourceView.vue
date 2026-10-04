@@ -41,8 +41,49 @@ async function loadMeta() {
 
 const dirty = computed(() => contentLoaded.value && content.value !== savedContent.value)
 
+// 保存前轻量语法预检：py 用后端 compile 校验，js/json 用浏览器端启发式
+const syntaxStatus = computed(() => {
+  const kind = info.value?.kind
+  const txt = content.value
+  if (!dirty.value || !txt.trim()) return null
+  if (kind === 'json') {
+    try { JSON.parse(txt); return { level: 'ok', text: '✓ 合法 JSON' } }
+    catch (e) { return { level: 'bad', text: `✗ JSON 语法错误：${e.message.slice(0, 60)}` } }
+  }
+  if (kind === 'py') {
+    // 浏览器无法编译 python：只做括号/引号平衡粗检，精确校验交给保存后端 compile
+    // 逐行扫描：跳过整行注释与多行字符串的简化处理——按行处理，行内先截断 # 注释
+    const pairs = { '(': ')', '[': ']', '{': '}' }
+    const stack = []
+    let inS = null, esc = false, lineComment = false
+    for (const ch of txt) {
+      if (ch === '\n') { lineComment = false; continue }
+      if (lineComment) continue
+      if (esc) { esc = false; continue }
+      if (ch === '\\') { esc = true; continue }
+      if (inS) { if (ch === inS) inS = null; continue }
+      if (ch === '"' || ch === "'") { inS = ch; continue }
+      if (ch === '#') { lineComment = true; continue }
+      if (pairs[ch]) stack.push(pairs[ch])
+      else if (Object.values(pairs).includes(ch)) {
+        if (stack.pop() !== ch) return { level: 'warn', text: '⚠ 括号可能不平衡' }
+      }
+    }
+    if (inS) return { level: 'warn', text: '⚠ 引号未闭合' }
+    if (stack.length) return { level: 'warn', text: '⚠ 括号可能不平衡' }
+    return null
+  }
+  if (kind === 'js') {
+    try { new Function(txt); return null }
+    catch (e) { return { level: 'warn', text: `⚠ JS 语法可疑：${String(e.message).slice(0, 60)}` } }
+  }
+  return null
+})
+
 async function save() {
   if (!dirty.value) { ElMessage.info('内容未修改，无需保存'); return }
+  if (syntaxStatus.value?.level === 'bad' &&
+      !window.confirm('当前内容存在语法错误，仍要保存吗？（可在版本历史回滚）')) return
   saving.value = true
   try {
     await saveSourceContent(id, { content: content.value, note: '在线编辑' })
@@ -89,6 +130,8 @@ onBeforeRouteLeave(() => {
       <el-tag size="small">{{ info.kind.toUpperCase() }}</el-tag>
       <span class="sub">{{ info.filename }} · v{{ info.current_version }}</span>
       <el-tag v-if="dirty" size="small" type="warning">未保存</el-tag>
+      <el-tag v-if="syntaxStatus" size="small" :type="syntaxStatus.level === 'bad' ? 'danger' : syntaxStatus.level === 'warn' ? 'warning' : 'success'">
+        {{ syntaxStatus.text }}</el-tag>
     </div>
 
     <el-tabs v-model="tab">
