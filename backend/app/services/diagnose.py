@@ -3,9 +3,7 @@ import json
 import re
 
 from ..config import SOURCES_DIR
-from .safe_fetch import safe_get, validate_url
-
-UA = "okhttp/4.9.3"
+from .safe_fetch import DEFAULT_UA, safe_get, validate_url
 
 
 def _check_url(label: str, url: str, results: list, timeout: float = 8.0):
@@ -16,7 +14,7 @@ def _check_url(label: str, url: str, results: list, timeout: float = 8.0):
         results.append({"level": "error", "item": label, "msg": f"URL 不允许：{e}"})
         return
     try:
-        safe_get(url, timeout=timeout, headers={"User-Agent": UA})
+        safe_get(url, timeout=timeout)  # 默认 okhttp UA + 自动嗅探回退
     except Exception as e:
         results.append({"level": "error", "item": label, "msg": f"不可达：{type(e).__name__}: {e}"[:200]})
         return

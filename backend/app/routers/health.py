@@ -28,11 +28,12 @@ import json
 from ..config import DATA_DIR, SOURCES_DIR
 from ..database import get_session, engine
 from ..models import Site
-from ..services.safe_fetch import validate_url
+from ..services.safe_fetch import DEFAULT_UA, UA_CANDIDATES, validate_url
 
 router = APIRouter(prefix="/sites", tags=["health"])
 
-UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+# 探测 UA：默认学 okhttp（TVBox/OK影视 生态），被 403 等拒绝时自动轮换候选 UA
+UA = DEFAULT_UA
 
 # JSON 站点分类页特征：响应体出现 "vod_list"/"list"/"class" 键
 JSON_OK = re.compile(r'"(vod_list|list|class)"\s*:', re.I)
@@ -61,6 +62,25 @@ def _json_probe_url(api) -> str:
     return base + sep + "ac=videolist"
 
 
+def _probe(url: str, timeout: float):
+    """带 UA 嗅探的 GET：先用 okhttp UA，被 401/403/406/412/451 拒绝则换下一个候选。
+
+    很多 JSON CMS / 源站会校验 User-Agent，用 python 默认 UA 或浏览器 UA 都会被拒。
+    返回最后一个响应（全部被拒时）或直接抛网络异常。
+    """
+    from ..services.safe_fetch import _client as _safe_client
+
+    last_resp = None
+    for ua in UA_CANDIDATES:
+        with _safe_client(timeout=timeout) as client:
+            r = client.get(url, headers={"User-Agent": ua})
+        if r.status_code in (401, 403, 406, 412, 451):
+            last_resp = r
+            continue
+        return r
+    return last_resp
+
+
 def check_http_json(api, timeout=12.0):
     t0 = time.monotonic()
     url = _json_probe_url(api)
@@ -68,14 +88,13 @@ def check_http_json(api, timeout=12.0):
         return {"ok": False, "kind": "skip", "message": "api 非 HTTP 地址", "latency_ms": 0}
     validate_url(url)
     try:
-        from ..services.safe_fetch import _client as _safe_client
-
-        with _safe_client(timeout=timeout) as client:
-            r = client.get(url, headers={"User-Agent": UA})
+        r = _probe(url, timeout)
         ms = int((time.monotonic() - t0) * 1000)
+        if r is None:
+            return {"ok": False, "kind": "http", "message": "无响应", "latency_ms": ms}
         if r.status_code != 200:
             return {"ok": False, "kind": "http", "status": r.status_code,
-                    "message": f"HTTP {r.status_code}", "latency_ms": ms}
+                    "message": f"HTTP {r.status_code}（已试 {len(UA_CANDIDATES)} 个 UA）", "latency_ms": ms}
         body = r.text[:200000]
         if JSON_OK.search(body) or '"vod_name"' in body:
             n = body.count("vod_name") or body.count("vod_id")
@@ -95,12 +114,9 @@ def check_xml(api, timeout=12.0):
         return {"ok": False, "kind": "skip", "message": "api 非 HTTP 地址", "latency_ms": 0}
     validate_url(url)
     try:
-        from ..services.safe_fetch import _client as _safe_client
-
-        with _safe_client(timeout=timeout) as client:
-            r = client.get(url, headers={"User-Agent": UA})
+        r = _probe(url, timeout)
         ms = int((time.monotonic() - t0) * 1000)
-        ok = r.status_code == 200 and XML_OK.search(r.text[:200000]) is not None
+        ok = r is not None and r.status_code == 200 and XML_OK.search(r.text[:200000]) is not None
         return {"ok": ok, "kind": "http", "status": r.status_code,
                 "message": "XML 列表有数据" if ok else "HTTP 异常或无 <video>/<class> 节点",
                 "latency_ms": ms}
@@ -262,14 +278,14 @@ def check_all(body: dict = None, session: Session = Depends(get_session)):
     from concurrent.futures import ThreadPoolExecutor
     BATCH = 20
 
-    def _probe(site):
+    def _probe_site(site):
         try:
             return run_check(site, timeout, session=None)
         except Exception as e:
             return {"ok": False, "detail": f"探测异常: {e}"}
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for i, (s, r) in enumerate(zip(items, pool.map(_probe, items))):
+        for i, (s, r) in enumerate(zip(items, pool.map(_probe_site, items))):
             s.last_test_at = datetime.datetime.now(datetime.timezone.utc)
             s.last_test_result = r
             session.add(s)
